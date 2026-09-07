@@ -18,11 +18,10 @@ import {
   Plus,
   Pencil,
   Quote,
-  Leaf,
   ArrowLeftRight,
-  Bookmark,
   ChevronDown,
-  Trash2,
+  LogIn,
+  UserRound,
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -60,6 +59,10 @@ import {
   reviewMemory,
   reviseMemory,
   assistantName,
+  migrateReplyLinks,
+  unansweredMessages,
+  unansweredLabels,
+  completeHandoff,
   type Person,
   type Memory,
   type Message,
@@ -76,16 +79,6 @@ import {
   type PresenceMap,
   type PresenceEvent,
 } from './presence';
-import {
-  canFavorite,
-  ownFavorites,
-  saveFavorite,
-  editFavorite,
-  removeFavorite,
-  restoreFavorite,
-  parseFavorites,
-  type PrivateFavorite,
-} from './favorites';
 
 export default function Home() {
   const [view, setView] = useState('chat'),
@@ -103,42 +96,8 @@ export default function Home() {
     [loaded, setLoaded] = useState(false),
     [sourceIds, setSourceIds] = useState<string[] | null>(null);
   const end = useRef<HTMLDivElement>(null);
-  const [favorites, setFavorites] = useState<PrivateFavorite[]>([]);
-  const [favoriteSource, setFavoriteSource] = useState<Message | null>(null);
-  const [favoriteEditing, setFavoriteEditing] = useState<string | null>(null);
-  const [favoriteNote, setFavoriteNote] = useState('');
-  const [removedFavorite, setRemovedFavorite] =
-    useState<PrivateFavorite | null>(null);
-  const [highlighted, setHighlighted] = useState<string | null>(null);
-  const myFavorites = ownFavorites(favorites, active);
-  const selectedFavorite = myFavorites.find((f) => f.id === favoriteEditing);
-  function openFavorite(message: Message) {
-    if (!canFavorite(message, active)) return;
-    const found = myFavorites.find((f) => f.source.messageId === message.id);
-    setFavoriteSource(message);
-    setFavoriteEditing(found?.id ?? null);
-    setFavoriteNote(found?.note ?? '');
-  }
-  function closeFavorite() {
-    setFavoriteSource(null);
-    setFavoriteEditing(null);
-    setFavoriteNote('');
-  }
-  function savePrivateFavorite() {
-    if (selectedFavorite)
-      setFavorites((all) =>
-        editFavorite(all, selectedFavorite.id, active, favoriteNote),
-      );
-    else if (favoriteSource)
-      setFavorites((all) =>
-        saveFavorite(all, favoriteSource, active, favoriteNote, Date.now()),
-      );
-    else return;
-    closeFavorite();
-    setNotice('已存入我的收藏，仅自己可见');
-  }
-  const [now, setNow] = useState(0),
-    [returned, setReturned] = useState<Person | null>(null);
+  const [now, setNow] = useState(0);
+  const [loginOpen, setLoginOpen] = useState(false);
   const [reviewing, setReviewing] = useState<Memory | null>(null),
     [feedback, setFeedback] = useState('');
   const auto = reception[active];
@@ -146,8 +105,6 @@ export default function Home() {
     林屿: canReceive(presence.林屿, true, now),
     许知夏: canReceive(presence.许知夏, true, now),
   };
-  const presenceRef = useRef(presence);
-  presenceRef.current = presence;
   function setAuto(enabled: boolean) {
     setReception((s) => ({ ...s, [active]: enabled }));
   }
@@ -161,7 +118,6 @@ export default function Home() {
   }
   function takeOver() {
     changePresence('takeover');
-    setReturned(null);
     setNotice('已接回对话');
   }
   function switchPerson() {
@@ -173,26 +129,18 @@ export default function Home() {
     }));
     setActive(partner);
     setNow(time);
-    setReturned(partner);
     setInput('');
     setEditing(null);
     setReviewing(null);
     setReplyTo(null);
-    closeFavorite();
-    setRemovedFavorite(null);
-    setHighlighted(null);
-    if (view === 'favorites') setView('chat');
     setNotice('已切换到' + partner);
   }
   const [editing, setEditing] = useState<Memory | null>(null),
     [draft, setDraft] = useState(''),
     [title, setTitle] = useState(''),
-    [shared, setShared] = useState(false),
     [subject, setSubject] = useState<Person | '我们'>(active),
     [filter, setFilter] = useState('all'),
-    [settings, setSettings] = useState(false),
-    [memorial, setMemorial] = useState(false),
-    [memoryQuestion, setMemoryQuestion] = useState('');
+    [settings, setSettings] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null),
     [humanReply, setHumanReply] = useState(''),
     [keywords, setKeywords] = useState('');
@@ -203,7 +151,7 @@ export default function Home() {
         const s = JSON.parse(raw);
         if (Array.isArray(s.memories) && Array.isArray(s.messages)) {
           setMemories(s.memories);
-          setMessages(s.messages);
+          setMessages(migrateReplyLinks(s.messages));
           setPresence(restorePresence(s.presence, s.busy));
           setReception({
             林屿: s.reception?.林屿 ?? s.auto ?? true,
@@ -212,15 +160,6 @@ export default function Home() {
           if (people.includes(s.active)) setActive(s.active);
         }
       }
-    } catch {}
-    try {
-      setFavorites(
-        parseFavorites(
-          JSON.parse(
-            localStorage.getItem('between-us-private-favorites-v1') ?? '[]',
-          ),
-        ),
-      );
     } catch {}
     setLoaded(true);
   }, []);
@@ -236,24 +175,12 @@ export default function Home() {
       }
   }, [memories, messages, presence, reception, active, loaded]);
   useEffect(() => {
-    if (loaded)
-      try {
-        localStorage.setItem(
-          'between-us-private-favorites-v1',
-          JSON.stringify(favorites),
-        );
-      } catch {
-        setNotice('浏览器未允许保存，收藏仅在当前页面保留');
-      }
-  }, [favorites, loaded]);
-  useEffect(() => {
     if (!loaded) return;
     function leave() {
       changePresence('leave');
     }
     function back() {
       if (document.visibilityState === 'hidden') return;
-      if (presenceRef.current[active].awaySince !== null) setReturned(active);
       changePresence('return');
     }
     return observePresence(document, window, leave, back);
@@ -278,13 +205,8 @@ export default function Home() {
   }, [presence, now]);
   useEffect(() => {
     if (view !== 'chat') return;
-    if (highlighted) {
-      document
-        .getElementById('message-' + highlighted)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } else
-      end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [messages, view, highlighted]);
+    end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [messages, view]);
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(''), 3500);
@@ -294,13 +216,12 @@ export default function Home() {
     const clean = text.trim();
     if (!clean) return;
     changePresence('takeover');
-    setReturned(null);
     setInput('');
-    setHighlighted(null);
+    const incomingId = uid();
     const next: Message[] = [
       ...messages,
       {
-        id: uid(),
+        id: incomingId,
         from: active,
         text: clean,
         sources: [],
@@ -309,7 +230,7 @@ export default function Home() {
       },
     ];
     if (canReceive(presence[partner], reception[partner], Date.now()))
-      next.push(answer(clean, active, partner, memories));
+      next.push(answer(clean, active, partner, memories, incomingId));
     setMessages(next);
   }
   const toolState = useRef({
@@ -415,15 +336,13 @@ export default function Home() {
     }
     return () => lifecycle.abort();
   }, []);
-  const pending = messages.filter(
-    (m) => m.from !== '此间' && m.recipient === active && !m.handled,
-  );
+  const pending = unansweredMessages(messages, active);
+  const currentHandoff = pending.find((item) => item.message.id === replyTo);
   const nav = [
     { id: 'chat', name: '此刻的我们', icon: MessageCircle },
     { id: 'perspectives', name: '彼此的模样', icon: Layers },
     { id: 'memories', name: '共同记忆', icon: BookHeart },
-    { id: 'favorites', name: '我的收藏', icon: Bookmark },
-    { id: 'handoff', name: '回来接着聊', icon: Inbox },
+    { id: 'handoff', name: '待你回应', icon: Inbox },
   ];
   function edit(m?: Memory) {
     setEditing(
@@ -433,14 +352,13 @@ export default function Home() {
         text: '',
         owner: active,
         subject: active,
-        shared: false,
+        shared: true,
         confirmed: false,
         tags: [],
       },
     );
     setDraft(m?.text || '');
     setTitle(m?.title || '');
-    setShared(m?.shared || false);
     setSubject(m?.subject || active);
     setKeywords(m?.tags.join('、') || '');
   }
@@ -453,7 +371,7 @@ export default function Home() {
         title: title.trim(),
         text: draft.trim(),
         subject,
-        shared,
+        shared: true,
         tags: [
           ...new Set(
             keywords
@@ -471,14 +389,13 @@ export default function Home() {
     );
     setEditing(null);
     setNotice(
-      shared && subject !== active
+      subject !== active
         ? '已分享，等待对方确认后才参与回复'
         : '已保存到这台设备上的演示空间',
     );
   }
-  const visibleMemories = memories.filter(
-    (m) => m.shared || m.owner === active,
-  );
+  // Old private memories remain in local storage but are never shown or promoted to shared.
+  const visibleMemories = memories.filter((m) => m.shared);
   function confirm(m: Memory) {
     if (!canReview(m, active)) return;
     setMemories((all) =>
@@ -509,18 +426,18 @@ export default function Home() {
     );
     if (!original || original.from === '此间') return;
     setMessages((all) => [
-      ...all.map((m) => (m.id === replyTo ? { ...m, handled: true } : m)),
+      ...completeHandoff(all, replyTo, active),
       {
         id: uid(),
         from: active,
         text: humanReply.trim(),
+        replyToId: replyTo,
         recipient: original.from as Person,
         sentAt: Date.now(),
         sources: [],
       },
     ]);
     changePresence('takeover');
-    setReturned(null);
     setReplyTo(null);
     setHumanReply('');
     setNotice('已由' + active + '本人回复');
@@ -529,18 +446,8 @@ export default function Home() {
     return (
       <article className="memory-card" key={m.id}>
         <div className="row-between">
-          <span
-            className={
-              'pill ' +
-              (!m.shared ? 'neutral' : m.confirmed ? 'confirmed' : 'warm')
-            }
-          >
-            {!m.shared ? (
-              <>
-                <LockKeyhole size={12} />
-                仅自己可见
-              </>
-            ) : m.confirmed ? (
+          <span className={'pill ' + (m.confirmed ? 'confirmed' : 'warm')}>
+            {m.confirmed ? (
               <>
                 <Check size={12} />
                 已确认
@@ -624,8 +531,7 @@ export default function Home() {
     chat: '此刻的我们',
     perspectives: '彼此的模样',
     memories: '共同记忆',
-    favorites: '我的收藏',
-    handoff: '回来接着聊',
+    handoff: '待你回应',
   };
   return (
     <SidebarProvider
@@ -641,11 +547,8 @@ export default function Home() {
               此间<span>BETWEEN US</span>
             </div>
           </div>
-          <div className="space-label">
-            林屿 & 许知夏 <LockKeyhole size={13} />
-          </div>
         </SidebarHeader>
-        <SidebarContent>
+        <SidebarContent className="our-sidebar-content">
           <p className="nav-caption">只属于我们的空间</p>
           <SidebarMenu>
             {nav.map((n) => (
@@ -664,43 +567,33 @@ export default function Home() {
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
-          <div className="side-note">
-            <span className="tiny-label">A LITTLE CLOSER</span>
-            <p>
-              有些话，
-              <br />
-              可以慢慢说。
-            </p>
-            <span>
-              给彼此留一点空间，
-              <br />
-              也留一盏等着的灯。
-            </span>
-          </div>
         </SidebarContent>
-        <SidebarFooter>
-          <button className="quiet-button" onClick={() => setMemorial(true)}>
-            <Leaf size={17} /> 回忆纪念模式 <ArrowUpRight size={15} />
-          </button>
-          <button className="quiet-button" onClick={() => setSettings(true)}>
-            <Settings2 size={17} /> 空间设置
-          </button>
-          <div className="viewer">
-            <Avatar person={active} />
-            <div>
-              <strong>{active}</strong>
-              <small>当前体验视角</small>
-            </div>
-            <button
-              title="切换体验身份"
-              aria-label="切换体验身份"
-              onClick={() => {
-                switchPerson();
-              }}
+        <SidebarFooter className="account-footer">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="account-trigger"
+              aria-label="账号与设置"
             >
-              <ArrowLeftRight size={17} />
-            </button>
-          </div>
+              <Avatar person={active} mini />
+              <span>
+                {active}
+                <small>体验账号</small>
+              </span>
+              <ChevronDown size={15} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="top"
+              align="start"
+              className="account-menu"
+            >
+              <DropdownMenuItem onClick={() => setLoginOpen(true)}>
+                <LogIn size={16} /> 登录 / 账号
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSettings(true)}>
+                <Settings2 size={16} /> 设置
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </SidebarFooter>
       </Sidebar>
       <main className="workspace">
@@ -725,29 +618,23 @@ export default function Home() {
                   ? '隔着距离，也接得住日常。'
                   : view === 'perspectives'
                     ? '在彼此眼里，认识我们。'
-                    : view === 'favorites'
-                      ? '有些话，留给自己记得。'
-                      : view === 'memories'
-                        ? '把小事，慢慢记成我们。'
-                        : '那些想说的话，都在这里。'}
+                    : view === 'memories'
+                      ? '把小事，慢慢记成我们。'
+                      : '先回应，最需要你的话。'}
               </h1>
               <p>
                 {view === 'chat'
                   ? '你可以先说，等有空的人回来接着听。'
                   : view === 'perspectives'
                     ? '我的感受、你的理解，都值得有自己的位置。'
-                    : view === 'favorites'
-                      ? '对方的原话，和只属于你的心情。'
-                      : view === 'memories'
-                        ? '每一段记忆，都保留讲述它的人。'
-                        : '接回对话，也接住对方的心情。'}
+                    : view === 'memories'
+                      ? '每一段记忆，都保留讲述它的人。'
+                      : 'AI 未能回答的部分，已经为你整理在这里。'}
               </p>
             </div>
             <button
               className="outline-button switch-person"
-              onClick={() => {
-                switchPerson();
-              }}
+              onClick={switchPerson}
             >
               <ArrowLeftRight size={16} />
               切换为{partner}
@@ -824,38 +711,13 @@ export default function Home() {
                   </div>
                 </div>
               </section>
-              {returned === active && pending.length > 0 && (
-                <div className="return-banner" role="status">
-                  <div>
-                    <strong>欢迎回来</strong>
-                    <p>有 {pending.length} 条留言等你回应。</p>
-                  </div>
-                  <button
-                    className="outline-button"
-                    onClick={() => setView('handoff')}
-                  >
-                    看看留言
-                  </button>
-                  {presence[active].manualBusy && (
-                    <button className="primary-button" onClick={takeOver}>
-                      接回对话
-                    </button>
-                  )}
-                  <button
-                    className="text-button"
-                    onClick={() => setReturned(null)}
-                  >
-                    收起
-                  </button>
-                </div>
-              )}
               <div className="chat-layout">
                 <section className="chat-panel">
                   <div className="chat-title">
                     <span className="small-icon">
                       <MessageCircle size={19} />
                     </span>
-                    <div>
+                    <div className="chat-heading">
                       <h2>留给彼此的话</h2>
                       <p>
                         {busy[partner]
@@ -867,10 +729,22 @@ export default function Home() {
                             : partner + '在这里'}
                       </p>
                     </div>
-                    <span className="private-tag">
-                      <LockKeyhole size={13} />
-                      双人空间
-                    </span>
+                    <div className="chat-assistant-controls">
+                      <label htmlFor="auto">我的助手</label>
+                      <Switch
+                        id="auto"
+                        checked={auto}
+                        onCheckedChange={setAuto}
+                      />
+                      <button
+                        className="chat-settings-button"
+                        aria-label="接待设置"
+                        title="接待设置"
+                        onClick={() => setSettings(true)}
+                      >
+                        <Settings2 size={16} />
+                      </button>
+                    </div>
                   </div>
                   <div
                     className="chat-messages"
@@ -885,8 +759,7 @@ export default function Home() {
                           'message ' +
                           (m.from === active ? 'mine' : '') +
                           ' ' +
-                          (m.from === '此间' ? 'assistant' : '') +
-                          (highlighted === m.id ? ' highlighted-message' : '')
+                          (m.from === '此间' ? 'assistant' : '')
                         }
                         key={m.id}
                         id={'message-' + m.id}
@@ -920,20 +793,6 @@ export default function Home() {
                               <Clock3 size={12} />
                               已留给{m.recipient}本人回应
                             </span>
-                          )}
-                          {canFavorite(m, active) && (
-                            <button
-                              className="message-favorite"
-                              onClick={() => openFavorite(m)}
-                              aria-label={'记住这句话：' + m.text.slice(0, 24)}
-                            >
-                              <Bookmark size={13} />
-                              {myFavorites.some(
-                                (f) => f.source.messageId === m.id,
-                              )
-                                ? '已收藏 · 仅自己可见'
-                                : '记住这句话'}
-                            </button>
                           )}
                         </div>
                       </div>
@@ -989,35 +848,6 @@ export default function Home() {
                   </div>
                 </section>
                 <aside className="context-column">
-                  <section className="bridge-card">
-                    <div className="row-between">
-                      <span className="small-icon">
-                        <Sparkles size={20} />
-                      </span>
-                      <span className="pill">
-                        {auto ? '我的助手可接待' : '我的助手已关闭'}
-                      </span>
-                    </div>
-                    <h2>让话有所安放</h2>
-                    <p>
-                      你不方便回复时，助手可以先接住日常。私有收藏不会成为回复的来源。
-                    </p>
-                    <div className="toggle-row">
-                      <label htmlFor="auto">允许我的助手接待</label>
-                      <Switch
-                        id="auto"
-                        checked={auto}
-                        onCheckedChange={setAuto}
-                      />
-                    </div>
-                    <button
-                      className="text-button"
-                      onClick={() => setSettings(true)}
-                    >
-                      看看接待约定
-                      <ArrowUpRight size={15} />
-                    </button>
-                  </section>
                   <section className="remember-card">
                     <p className="eyebrow">A SHARED MEMORY</p>
                     <Quote size={22} />
@@ -1045,122 +875,6 @@ export default function Home() {
                   </div>
                 </aside>
               </div>
-            </>
-          )}
-          {view === 'favorites' && (
-            <>
-              <div className="section-toolbar">
-                <span>
-                  <LockKeyhole size={17} />
-                  仅自己可见 · {myFavorites.length} 条收藏
-                </span>
-              </div>
-              <div className="favorites-grid">
-                {myFavorites
-                  .slice()
-                  .sort((a, b) => b.savedAt - a.savedAt)
-                  .map((f) => (
-                    <article className="favorite-card" key={f.id}>
-                      <div className="memory-meta">
-                        <Avatar person={f.source.speaker} mini />
-                        <span>
-                          {f.source.speaker}的原话 ·{' '}
-                          {f.source.sentAt === null
-                            ? '原消息未记录时间'
-                            : formatTime(f.source.sentAt)}
-                        </span>
-                      </div>
-                      <blockquote>{f.source.text}</blockquote>
-                      <div className="favorite-note">
-                        <span>我的备注</span>
-                        <p>{f.note || '还没有写下备注。'}</p>
-                      </div>
-                      <small>收藏于 {formatTime(f.savedAt)}</small>
-                      <div className="favorite-actions">
-                        <button
-                          className="text-button"
-                          onClick={() => {
-                            setFavoriteEditing(f.id);
-                            setFavoriteSource(null);
-                            setFavoriteNote(f.note);
-                          }}
-                        >
-                          <Pencil size={14} />
-                          编辑备注
-                        </button>
-                        <button
-                          className="text-button"
-                          disabled={
-                            !messages.some((m) => m.id === f.source.messageId)
-                          }
-                          onClick={() => {
-                            setHighlighted(f.source.messageId);
-                            setView('chat');
-                          }}
-                        >
-                          回到原对话
-                          <ChevronRight size={14} />
-                        </button>
-                        <button
-                          className="text-button"
-                          onClick={() => {
-                            setFavorites((all) =>
-                              removeFavorite(all, f.id, active),
-                            );
-                            setRemovedFavorite(f);
-                            setNotice('收藏已移除，原对话没有删除');
-                          }}
-                        >
-                          <Trash2 size={14} />
-                          移除收藏
-                        </button>
-                      </div>
-                      {!messages.some((m) => m.id === f.source.messageId) && (
-                        <small>原消息已无法定位，这里仍保留当时的原话。</small>
-                      )}
-                    </article>
-                  ))}
-              </div>
-              {myFavorites.length === 0 && (
-                <div className="empty-state">
-                  <Bookmark size={32} />
-                  <h2>把想记住的话，留在这里</h2>
-                  <p>
-                    点击对方消息下方的“记住这句话”。不会通知对方，也无需对方确认。
-                  </p>
-                  <button
-                    className="outline-button"
-                    onClick={() => setView('chat')}
-                  >
-                    去看看对话
-                  </button>
-                </div>
-              )}
-              {removedFavorite?.owner === active && (
-                <div className="favorite-undo" role="status">
-                  <span>已移除一条收藏，原对话仍保留。</span>
-                  <button
-                    className="text-button"
-                    onClick={() => {
-                      setFavorites((all) =>
-                        restoreFavorite(all, removedFavorite, active),
-                      );
-                      setRemovedFavorite(null);
-                    }}
-                  >
-                    撤销
-                  </button>
-                </div>
-              )}
-              <details className="private-boundary">
-                <summary>关于私有收藏</summary>
-                <p>
-                  收藏与备注不向对方显示，不通知、不计入共享记忆，也不会被接待助手引用。此处没有一键共享入口。
-                </p>
-                <p>
-                  当前是同机演示，切换身份并不构成真实访问控制；数据没有加密，请勿存放真实秘密。
-                </p>
-              </details>
             </>
           )}
           {view === 'perspectives' && (
@@ -1277,7 +991,6 @@ export default function Home() {
                   {[
                     ['all', '全部记忆'],
                     ['shared', '双方共享'],
-                    ['private', '只属于我'],
                     ['pending', '等待回应'],
                     ['disputed', '存在分歧'],
                     ['deferred', '稍后再说'],
@@ -1287,129 +1000,156 @@ export default function Home() {
                     </TabsTrigger>
                   ))}
                 </TabsList>
-                {[
-                  'all',
-                  'shared',
-                  'private',
-                  'pending',
-                  'disputed',
-                  'deferred',
-                ].map((f) => (
-                  <TabsContent value={f} key={f}>
-                    <div className="memory-grid">
-                      {visibleMemories
-                        .filter(
-                          (m) =>
-                            f === 'all' ||
-                            (f === 'shared' && m.shared) ||
-                            (f === 'private' && !m.shared) ||
-                            (m.shared && f === memoryStatus(m)),
-                        )
-                        .map(memoryCard)}
-                    </div>
-                    {!visibleMemories.some(
-                      (m) =>
-                        f === 'all' ||
-                        (f === 'shared' && m.shared) ||
-                        (f === 'private' && !m.shared) ||
-                        (m.shared && f === memoryStatus(m)),
-                    ) && (
-                      <div className="empty-state">
-                        <BookHeart size={32} />
-                        <h2>
-                          {f === 'pending'
-                            ? '没有等待确认的记忆'
-                            : '这里还空着'}
-                        </h2>
-                        <p>
-                          {f === 'pending'
-                            ? '下一份新的理解，可以慢慢聊。'
-                            : '写下一个偏好、一段回忆，或者暂时只想自己知道的事。'}
-                        </p>
-                        <button
-                          className="outline-button"
-                          onClick={() => edit()}
-                        >
-                          添加一条记忆
-                        </button>
+                {['all', 'shared', 'pending', 'disputed', 'deferred'].map(
+                  (f) => (
+                    <TabsContent value={f} key={f}>
+                      <div className="memory-grid">
+                        {visibleMemories
+                          .filter(
+                            (m) =>
+                              f === 'all' ||
+                              (f === 'shared' && m.shared) ||
+                              (m.shared && f === memoryStatus(m)),
+                          )
+                          .map(memoryCard)}
                       </div>
-                    )}
-                  </TabsContent>
-                ))}
+                      {!visibleMemories.some(
+                        (m) =>
+                          f === 'all' ||
+                          (f === 'shared' && m.shared) ||
+                          (m.shared && f === memoryStatus(m)),
+                      ) && (
+                        <div className="empty-state">
+                          <BookHeart size={32} />
+                          <h2>
+                            {f === 'pending'
+                              ? '没有等待确认的记忆'
+                              : '这里还空着'}
+                          </h2>
+                          <p>
+                            {f === 'pending'
+                              ? '下一份新的理解，可以慢慢聊。'
+                              : '写下愿意和对方分享的偏好，或一段共同回忆。'}
+                          </p>
+                          <button
+                            className="outline-button"
+                            onClick={() => edit()}
+                          >
+                            添加一条记忆
+                          </button>
+                        </div>
+                      )}
+                    </TabsContent>
+                  ),
+                )}
               </Tabs>
               <div className="info-note memory-explain">
                 <LockKeyhole size={17} />
-                只属于自己的记忆不会被接待助手引用。关于对方或共同经历的新记录，需要另一方确认。
+                这里的记忆双方都能看见。关于对方或共同经历的新记录，需要另一方确认后，助手才会引用。
               </div>
             </>
           )}
           {view === 'handoff' && (
             <>
-              <section className="handoff-banner">
+              <section className="handoff-summary">
                 <div>
-                  <p className="eyebrow">
-                    WELCOME BACK, {active === '林屿' ? 'LIN' : 'XIA'}
-                  </p>
                   <h2>
                     {pending.length
-                      ? '你不在时，' +
-                        partner +
-                        '留了 ' +
-                        pending.length +
-                        ' 句话。'
-                      : '此刻，没有漏接的话。'}
+                      ? pending.length + ' 条消息需要你补充'
+                      : '暂时没有 AI 未答的问题'}
                   </h2>
-                  <p>接待助手保留了原话。你可以从最想回应的那一句开始。</p>
+                  <p>关系与感受优先展示，AI 已答清楚的内容不再列入。</p>
                 </div>
-                <button className="primary-button" onClick={takeOver}>
-                  <Check size={16} />
-                  {busy[active] ? '我回来了，接回对话' : '本人已接回'}
-                </button>
+                {busy[active] && (
+                  <button className="outline-button" onClick={takeOver}>
+                    接回对话
+                  </button>
+                )}
               </section>
               {pending.length > 0 ? (
                 <div className="handoff-list">
-                  {pending.map((m) => (
+                  {pending.map(({ message: m, parts }) => (
                     <article className="handoff-item" key={m.id}>
-                      <Avatar person={m.from} />
+                      <Avatar person={m.from} mini />
                       <div>
                         <div className="row-between">
-                          <strong>{m.from}说</strong>
-                          <span className="pill warm">待本人回应</span>
+                          <strong>{m.from} · 等你回应</strong>
+                          {m.sentAt && <small>{formatTime(m.sentAt)}</small>}
                         </div>
-                        <p>{m.text}</p>
-                        <button
-                          className="text-button"
-                          onClick={() => {
-                            setReplyTo(m.id);
-                            setHumanReply('');
-                          }}
-                        >
-                          亲自回一句
-                          <ArrowUpRight size={15} />
-                        </button>
+                        <div className="unanswered-parts">
+                          {parts.map((part, index) => (
+                            <div className="unanswered-part" key={index}>
+                              <span
+                                className={
+                                  'pill ' +
+                                  (part.priority < 2 ? 'warm' : 'neutral')
+                                }
+                              >
+                                {unansweredLabels[part.reason]}
+                              </span>
+                              <p>{part.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <details className="handoff-context">
+                          <summary>展开原消息与 AI 回复</summary>
+                          <p>{m.text}</p>
+                          <small>
+                            {assistantName(
+                              messages.find(
+                                (item) =>
+                                  item.from === '此间' &&
+                                  item.replyToId === m.id,
+                              )!,
+                            )}
+                          </small>
+                          <p>
+                            {
+                              messages.find(
+                                (item) =>
+                                  item.from === '此间' &&
+                                  item.replyToId === m.id,
+                              )?.text
+                            }
+                          </p>
+                        </details>
+                        <div className="handoff-actions">
+                          <button
+                            className="primary-button"
+                            onClick={() => {
+                              setReplyTo(m.id);
+                              setHumanReply('');
+                            }}
+                          >
+                            回应这些内容 <ArrowUpRight size={15} />
+                          </button>
+                          <button
+                            className="text-button"
+                            onClick={() => {
+                              setMessages((all) =>
+                                completeHandoff(all, m.id, active),
+                              );
+                              setNotice('已标记处理，不会发送新消息');
+                            }}
+                          >
+                            已当面回应
+                          </button>
+                        </div>
                       </div>
                     </article>
                   ))}
                 </div>
               ) : (
                 <div className="empty-state">
-                  <Inbox size={35} />
-                  <h2>等你们下一段对话</h2>
-                  <p>先切换为对方，留一句话，再回来体验消息交接。</p>
-                  <button
-                    className="outline-button"
-                    onClick={() => {
-                      switchPerson();
-                      setView('chat');
-                    }}
-                  >
-                    切换身份并去留言
-                  </button>
+                  <Check size={32} />
+                  <h2>需要你回应的话，会整理在这里</h2>
+                  <p>
+                    AI 未能回答的信息与需要本人回应的感受，将按重要程度排列。
+                  </p>
                 </div>
               )}
               <button className="text-button" onClick={() => setView('chat')}>
-                查看完整对话
-                <ChevronRight size={15} />
+                回到对话 <ChevronRight size={15} />
               </button>
             </>
           )}
@@ -1478,41 +1218,6 @@ export default function Home() {
         </DialogContent>
       </Dialog>
       <Dialog
-        open={favoriteSource !== null || selectedFavorite !== undefined}
-        onOpenChange={(o) => {
-          if (!o) closeFavorite();
-        }}
-      >
-        <DialogContent className="our-dialog">
-          <DialogTitle>
-            {selectedFavorite ? '我的收藏' : '记住这句话'}
-          </DialogTitle>
-          <DialogDescription>
-            仅自己可见，不通知对方，也不供接待助手使用。
-          </DialogDescription>
-          <div className="source-card">
-            <span className="pill">
-              {selectedFavorite?.source.speaker ?? favoriteSource?.from}的原话
-            </span>
-            <p>{selectedFavorite?.source.text ?? favoriteSource?.text}</p>
-          </div>
-          <label>
-            我的备注（选填）
-            <textarea
-              rows={4}
-              maxLength={600}
-              placeholder="留下一点此刻的想法……"
-              value={favoriteNote}
-              onChange={(e) => setFavoriteNote(e.target.value)}
-            />
-          </label>
-          <button className="primary-button" onClick={savePrivateFavorite}>
-            <LockKeyhole size={16} />
-            保存到我的收藏
-          </button>
-        </DialogContent>
-      </Dialog>
-      <Dialog
         open={reviewing !== null}
         onOpenChange={(o) => {
           if (!o) {
@@ -1554,7 +1259,7 @@ export default function Home() {
         <DialogContent className="our-dialog">
           <DialogTitle>留下一点关于我们的事</DialogTitle>
           <DialogDescription>
-            由{active}讲述，保存在这台设备上。
+            由{active}讲述，保存后双方都能看见。
           </DialogDescription>
           <div>
             <span className="field-label">这件事关于谁</span>
@@ -1601,19 +1306,11 @@ export default function Home() {
               onChange={(e) => setKeywords(e.target.value)}
             />
           </label>
-          <div className="toggle-row">
-            <label htmlFor="shared-memory">允许对方和接待助手使用</label>
-            <Switch
-              id="shared-memory"
-              checked={shared}
-              onCheckedChange={setShared}
-            />
-          </div>
-          {shared && subject !== active && (
-            <p className="info-note">
-              分享后会先请对方确认。确认前，接待助手不会把这份理解当作事实。
-            </p>
-          )}
+          <p className="info-note">
+            {subject !== active
+              ? '关于对方或共同经历的记忆，须由对方确认后，助手才会引用。'
+              : '你分享的自我信息，可以作为助手回复的来源。'}
+          </p>
           <button
             className="primary-button"
             disabled={!title.trim() || !draft.trim()}
@@ -1638,8 +1335,10 @@ export default function Home() {
             这条消息会以{active}本人的身份出现在演示对话中。
           </DialogDescription>
           <div className="source-card">
-            <span className="pill">{partner}的原话</span>
-            <p>{messages.find((m) => m.id === replyTo)?.text}</p>
+            <span className="pill">需要你回应的部分</span>
+            {currentHandoff?.parts.map((part, index) => (
+              <p key={index}>{part.text}</p>
+            ))}
           </div>
           <label>
             你想说的话
@@ -1661,35 +1360,28 @@ export default function Home() {
           </button>
         </DialogContent>
       </Dialog>
-      <Dialog open={memorial} onOpenChange={setMemorial}>
-        <DialogContent className="our-dialog">
-          <DialogTitle>把回忆，留在此间</DialogTitle>
+      <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
+        <DialogContent className="our-dialog account-dialog">
+          <UserRound size={26} />
+          <DialogTitle>登录此间</DialogTitle>
           <DialogDescription>
-            独立的纪念体验 ·
-            以下为虚构的奶奶与爷爷的故事。回答来自讲述者的回忆，不代表逝者本人。
+            当前为体验版，正式账号登录尚未开放。可以选择一个演示身份继续体验。
           </DialogDescription>
-          <div className="source-card">
-            <span className="pill">奶奶讲述的回忆</span>
-            <p>
-              “以前一下雨，他就会煮一碗番茄面。总说，趁热吃，吃完心里就暖了。”
-            </p>
+          <div className="account-choices">
+            {people.map((person) => (
+              <button
+                className="outline-button"
+                key={person}
+                onClick={() => {
+                  if (person !== active) switchPerson();
+                  setLoginOpen(false);
+                }}
+              >
+                <Avatar person={person} mini />以{person}体验
+                {person === active && <Check size={16} />}
+              </button>
+            ))}
           </div>
-          <button
-            className="outline-button"
-            onClick={() =>
-              setMemoryQuestion(
-                '在这段回忆里，爷爷用一碗热面表达关心。奶奶记得他说过：「趁热吃，吃完心里就暖了。」',
-              )
-            }
-          >
-            想起下雨天，他会说些什么？
-          </button>
-          {memoryQuestion && (
-            <div className="info-note">
-              {memoryQuestion}
-              <small>来源：上方的虚构回忆 · 回忆助手整理</small>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
       {notice && (

@@ -27,113 +27,6 @@
   margin-top: 0;
   font-size: 14px;
 }
-.message-favorite {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  border: 0;
-  background: transparent;
-  color: #86738f;
-  padding: 5px 0;
-  margin-top: 3px;
-  font-size: 12px;
-}
-.highlighted-message .bubble {
-  outline: 2px solid #9980c9;
-  outline-offset: 3px;
-}
-.favorites-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-.favorite-card {
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 24px;
-  min-width: 0;
-}
-.favorite-card .memory-meta {
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.favorite-card blockquote {
-  margin: 20px 0;
-  padding-left: 15px;
-  border-left: 3px solid #d6c9ed;
-  color: #665274;
-  font-size: 16px;
-  line-height: 1.9;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.favorite-note {
-  background: #f6f3fb;
-  border-radius: 9px;
-  padding: 14px;
-  margin-bottom: 12px;
-}
-.favorite-note > span {
-  font-size: 12px;
-  color: #897997;
-}
-.favorite-note p {
-  font-size: 16px;
-  line-height: 1.9;
-  margin-top: 5px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.favorite-card > small {
-  display: block;
-  font-size: 12px;
-  color: #8c8097;
-}
-.favorite-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin: 15px 0 6px;
-}
-.favorite-actions .text-button {
-  margin: 0;
-}
-.private-boundary {
-  margin-top: 24px;
-  font-size: 14px;
-  color: #82728e;
-  line-height: 1.9;
-}
-.private-boundary summary {
-  cursor: pointer;
-}
-.private-boundary p {
-  margin-top: 9px;
-}
-.favorite-undo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 15px;
-  padding: 12px 16px;
-  background: #eee8f8;
-  border-radius: 10px;
-  margin-top: 20px;
-  font-size: 14px;
-}
-.favorite-undo .text-button {
-  margin: 0;
-}
-@media (max-width: 767px) {
-  .favorites-grid {
-    grid-template-columns: 1fr;
-  }
-  .favorite-card {
-    padding: 18px;
-  }
-}
 .presence-controls {
   display: flex;
   flex-wrap: wrap;
@@ -161,25 +54,6 @@
   margin-top: 5px;
   font-size: 12px;
   color: #857b90;
-}
-.return-banner {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: center;
-  padding: 16px 20px;
-  margin-bottom: 18px;
-  border: 1px solid #dcd5ef;
-  border-radius: 12px;
-  background: #f0ebfc;
-  font-size: 14px;
-}
-.return-banner > div {
-  flex: 1;
-  min-width: 180px;
-}
-.return-banner .text-button {
-  margin-top: 0;
 }
 .review-actions {
   display: flex;
@@ -361,17 +235,6 @@ h3 {
   background: #efedfb;
   border-radius: 16px 16px 16px 5px;
 }
-.space-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: #747188;
-  font-size: 14px;
-  margin: 22px 0 25px;
-  padding: 10px 12px;
-  background: #f6f6fa;
-  border-radius: 8px;
-}
 .nav-caption {
   font-size: 12px;
   color: #827990;
@@ -400,64 +263,6 @@ h3 {
   border-radius: 10px;
   padding: 0 6px;
   font-size: 12px;
-}
-.side-note {
-  padding: 30px 15px;
-  margin-top: 45px;
-}
-.tiny-label {
-  font-size: 12px;
-  letter-spacing: 1.2px;
-  color: #887c9d;
-}
-.side-note p {
-  font-family: Georgia, 'Songti SC', serif;
-  font-size: 24px;
-  line-height: 1.8;
-  letter-spacing: 2px;
-  margin: 14px 0;
-  color: #77718f;
-}
-.side-note > span:last-child {
-  font-size: 12px;
-  color: #888093;
-  line-height: 1.9;
-}
-.quiet-button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 0;
-  background: none;
-  color: #827a93;
-  padding: 11px 8px;
-  font-size: 14px;
-}
-.quiet-button svg:last-child {
-  margin-left: auto;
-}
-.viewer {
-  border-top: 1px solid var(--border);
-  margin-top: 15px;
-  padding-top: 20px;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.viewer strong {
-  font-size: 14px;
-}
-.viewer small {
-  display: block;
-  font-size: 12px;
-  color: #857b92;
-}
-.viewer button {
-  border: 0;
-  background: none;
-  margin-left: auto;
-  color: #8b819f;
-  padding: 6px;
 }
 .avatar {
   display: inline-flex;
@@ -539,6 +344,7 @@ h3 {
   padding: 33px 42px;
 }
 .page-heading {
+  flex-wrap: wrap;
   display: flex;
   justify-content: space-between;
   gap: 20px;
@@ -655,6 +461,8 @@ h3 {
   align-items: start;
 }
 .chat-panel {
+  min-width: 0;
+  container-type: inline-size;
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 15px;
@@ -662,7 +470,7 @@ h3 {
   box-shadow: 0 7px 25px #34226803;
 }
 .chat-title {
-  padding: 20px 23px;
+  padding: 14px 18px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -681,15 +489,6 @@ h3 {
   font-size: 12px;
   color: #8c7e9b;
   margin-top: 3px;
-}
-.private-tag {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: #8c7e9b;
-  white-space: nowrap;
 }
 .chat-messages {
   height: 340px;
@@ -831,7 +630,6 @@ h3 {
   margin: 10px 0 0;
   color: #95889f;
 }
-.bridge-card,
 .remember-card {
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -852,15 +650,6 @@ h3 {
   border-radius: 5px;
   font-size: 12px;
 }
-.bridge-card h2 {
-  margin-top: 16px;
-  margin-bottom: 10px;
-}
-.bridge-card > p {
-  font-size: 14px;
-  color: #85778f;
-  line-height: 1.95;
-}
 .toggle-row {
   display: flex;
   align-items: center;
@@ -868,10 +657,6 @@ h3 {
   gap: 20px;
   padding: 17px 0;
   border-bottom: 1px solid #efeaf5;
-  font-size: 14px;
-}
-.bridge-card .toggle-row {
-  margin-top: 8px;
   font-size: 14px;
 }
 .text-button {
@@ -1050,15 +835,8 @@ h3 {
   .page-heading h1 {
     font-size: 25px;
   }
-  .private-tag {
-    display: none;
-  }
-  .bridge-card,
   .remember-card {
     padding: 17px;
-  }
-  .switch-person {
-    display: none;
   }
 }
 @media (max-width: 1000px) {
@@ -1347,30 +1125,6 @@ h3 {
   padding: 20px;
   color: #9e8eab;
 }
-.handoff-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 22px;
-  padding: 28px;
-  background: #efeaf8;
-  border: 1px solid #e5ddee;
-  border-radius: 15px;
-  margin: 25px 0;
-}
-.handoff-banner h2 {
-  font-size: 22px;
-  font-family: 'Songti SC', serif;
-  color: #6b547d;
-}
-.handoff-banner p:not(.eyebrow) {
-  font-size: 14px;
-  color: #907b9d;
-  margin-top: 8px;
-}
-.handoff-banner > button {
-  white-space: nowrap;
-}
 .handoff-list {
   display: flex;
   flex-direction: column;
@@ -1480,11 +1234,6 @@ h3 {
     padding: 9px !important;
     font-size: 12px !important;
   }
-  .handoff-banner {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 23px;
-  }
   .handoff-item {
     padding: 18px;
   }
@@ -1493,5 +1242,190 @@ h3 {
   }
   .page-heading .eyebrow {
     font-size: 12px;
+  }
+}
+
+/* Compact navigation and a single, always-reachable account entry. */
+.our-sidebar-content {
+  overflow: visible !important;
+  margin-top: 28px;
+}
+.account-footer {
+  margin-top: auto;
+  padding: 8px 0 0;
+}
+.account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  color: var(--foreground);
+  font-size: 14px;
+}
+.account-trigger:hover,
+.account-trigger[data-popup-open] {
+  background: var(--secondary);
+}
+.account-trigger > span:nth-child(2) {
+  flex: 1;
+}
+.account-trigger small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.account-menu {
+  min-width: 208px;
+  padding: 6px;
+}
+.account-menu [data-slot='dropdown-menu-item'] {
+  padding: 10px;
+  gap: 10px;
+}
+.account-choices {
+  display: grid;
+  gap: 10px;
+}
+.account-choices > button {
+  justify-content: flex-start;
+  width: 100%;
+}
+.handoff-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 24px 0;
+}
+.handoff-summary h2 {
+  font-size: 20px;
+}
+.handoff-summary p,
+.handoff-item small {
+  color: var(--muted-foreground);
+  font-size: 14px;
+}
+.handoff-item > div {
+  min-width: 0;
+}
+.unanswered-parts {
+  display: grid;
+  gap: 15px;
+  margin: 18px 0;
+}
+.unanswered-part p {
+  margin-top: 6px;
+  color: var(--foreground);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.handoff-context {
+  font-size: 14px;
+  color: var(--muted-foreground);
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.handoff-context summary {
+  cursor: pointer;
+}
+.handoff-context p {
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.handoff-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+}
+.handoff-actions .text-button {
+  margin: 0;
+}
+@media (max-width: 767px) {
+  .handoff-summary {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .handoff-item .row-between {
+    flex-wrap: wrap;
+  }
+}
+@media (max-height: 560px) {
+  .app-sidebar [data-slot='sidebar-inner'] {
+    padding-top: 12px;
+    padding-bottom: 10px;
+  }
+  .our-sidebar-content {
+    margin-top: 10px;
+  }
+  .nav-caption {
+    margin-bottom: 5px;
+  }
+  .nav-item {
+    height: 38px !important;
+    margin-bottom: 2px;
+  }
+}
+
+/* Assistant controls share the existing conversation header. */
+.chat-heading {
+  flex: 1;
+  min-width: 0;
+}
+.chat-assistant-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 14px;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+.chat-assistant-controls label {
+  cursor: pointer;
+}
+.chat-settings-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+.chat-settings-button:hover {
+  background: var(--secondary);
+  color: var(--primary);
+}
+@container (max-width: 600px) {
+  .chat-title {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .chat-title > .small-icon {
+    display: none;
+  }
+  .chat-heading h2 {
+    font-size: 16px;
+  }
+}
+@container (max-width: 360px) {
+  .chat-title {
+    flex-wrap: wrap;
+  }
+  .chat-heading {
+    flex-basis: 100%;
+  }
+  .chat-assistant-controls {
+    margin-left: auto;
   }
 }

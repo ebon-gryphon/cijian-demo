@@ -8,7 +8,20 @@ test('confirmed partner schedule is quoted with its source', () => {
   assert.equal(r.pending, false);
 });
 test('private knowledge cannot answer a message', () => {
-  const r = answer('工作的担心是什么？', '许知夏', '林屿', initialMemories);
+  const legacyPrivate = {
+    id: 'legacy-private',
+    title: '工作',
+    text: '工作的变化',
+    owner: '林屿',
+    subject: '林屿',
+    shared: false,
+    confirmed: true,
+    tags: ['工作'],
+  };
+  const r = answer('工作的担心是什么？', '许知夏', '林屿', [
+    ...initialMemories,
+    legacyPrivate,
+  ]);
   assert.deepEqual(r.sources, []);
   assert.ok(!r.text.includes('工作的变化'));
   assert.equal(r.pending, true);

@@ -26,7 +26,98 @@ export type Message = {
   pending?: boolean;
   assistantFor?: Person;
   sentAt?: number;
+  replyToId?: string;
+  unresolved?: UnansweredPart[];
 };
+export type UnansweredPart = {
+  text: string;
+  reason: 'relationship' | 'emotion' | 'unknown';
+  priority: number;
+};
+export const unansweredLabels = {
+  relationship: '关系与决定 · 需要你亲自回应',
+  emotion: '情绪与感受 · 请优先关心',
+  unknown: '信息不足 · 需要你补充',
+};
+
+const relationshipPattern = /分手|结婚|爱不爱|承诺|保证|吵架|为什么不理|原谅/;
+const emotionPattern = /难过|委屈|不开心|累|烦/;
+
+export function unansweredPart(text: string): UnansweredPart {
+  if (relationshipPattern.test(text))
+    return { text, reason: 'relationship', priority: 0 };
+  if (emotionPattern.test(text))
+    return { text, reason: 'emotion', priority: 1 };
+  return { text, reason: 'unknown', priority: 2 };
+}
+
+// Legacy replies were appended immediately after the incoming message.
+// Link only that adjacent pair; never infer a handoff from an unassisted message.
+export function migrateReplyLinks(messages: Message[]): Message[] {
+  return messages.map((message, index) => {
+    const previous = messages[index - 1];
+    if (
+      message.from !== '此间' ||
+      message.replyToId ||
+      !previous ||
+      previous.from === '此间' ||
+      previous.recipient !== message.recipient
+    )
+      return message;
+    return {
+      ...message,
+      replyToId: previous.id,
+      pending: previous.handled ? false : message.pending,
+      unresolved: message.pending ? [unansweredPart(previous.text)] : [],
+    };
+  });
+}
+
+export function unansweredMessages(messages: Message[], person: Person) {
+  return messages
+    .flatMap((message, index) => {
+      if (
+        message.from === '此间' ||
+        message.recipient !== person ||
+        message.handled
+      )
+        return [];
+      const reply = messages.find(
+        (m) => m.from === '此间' && m.replyToId === message.id && m.pending,
+      );
+      if (!reply) return [];
+      const parts = reply.unresolved?.length
+        ? reply.unresolved
+        : [unansweredPart(message.text)];
+      return [
+        {
+          message,
+          parts: [...parts].sort((a, b) => a.priority - b.priority),
+          priority: Math.min(...parts.map((part) => part.priority)),
+          index,
+        },
+      ];
+    })
+    .sort((a, b) => a.priority - b.priority || a.index - b.index);
+}
+
+export function completeHandoff(
+  messages: Message[],
+  messageId: string,
+  person: Person,
+): Message[] {
+  const original = messages.find(
+    (m) => m.id === messageId && m.from !== '此间' && m.recipient === person,
+  );
+  if (!original) return messages;
+  return messages.map((m) =>
+    m.id === messageId
+      ? { ...m, handled: true }
+      : m.from === '此间' && m.replyToId === messageId
+        ? { ...m, pending: false, handled: true }
+        : m,
+  );
+}
 export function memoryStatus(m: Memory) {
   return m.review ?? (m.confirmed ? 'confirmed' : 'pending');
 }
@@ -134,16 +225,6 @@ export const initialMemories: Memory[] = [
     tags: ['雨', '面', '第一次', '回忆'],
   },
   {
-    id: 'private',
-    title: '还没准备好说的小心事',
-    text: '最近有一点担心工作的变化，想等自己想清楚再聊。',
-    owner: '林屿',
-    subject: '林屿',
-    shared: false,
-    confirmed: false,
-    tags: ['工作', '担心'],
-  },
-  {
     id: 'view',
     title: '你总会记住小事情',
     text: '我眼里的林屿很细心，会记住我随口说过的小事情。',
@@ -169,7 +250,7 @@ export const initialMessages: Message[] = [
   },
 ];
 export const uid = () => Math.random().toString(36).slice(2);
-export function answer(
+function answerPart(
   text: string,
   active: Person,
   partner: Person,
@@ -191,12 +272,12 @@ export function answer(
     (m) => m.owner === partner && m.subject === partner,
   );
   const common = matches.find((m) => m.subject === '我们');
-  if (/分手|结婚|爱不爱|承诺|保证|吵架|为什么不理|原谅/.test(text)) {
+  if (relationshipPattern.test(text)) {
     reply =
       '这句话需要' +
       partner +
       '亲自回应。我会把它放在交接里，不替本人作决定或表达感情。';
-  } else if (/难过|委屈|不开心|累|烦/.test(text)) {
+  } else if (emotionPattern.test(text)) {
     const care = eligible.find(
       (m) => m.owner === active && m.subject === active && m.id === 'care',
     );
@@ -206,7 +287,13 @@ export function answer(
       '。' +
       (care ? '你说过「' + care.text + '」这份偏好也会一起提醒本人。' : '');
     sources = care ? [care.id] : [];
-  } else if (personal || common) {
+  } else if (
+    (personal || common) &&
+    !(
+      /车次|几点出发|哪趟/.test(text) &&
+      /还没定|尚未确定|不知道/.test((personal || common)!.text)
+    )
+  ) {
     const m = (personal || common)!;
     reply =
       (m.subject === '我们'
@@ -225,5 +312,38 @@ export function answer(
     sources,
     pending,
     recipient: partner,
+  };
+}
+
+export function answer(
+  text: string,
+  active: Person,
+  partner: Person,
+  memories: Memory[],
+  replyToId?: string,
+): Message {
+  // Keep literal fragments, not invented summaries. Separate questions can be
+  // answered independently while sensitive clauses always remain for the human.
+  const fragments = text
+    .match(/[^。？！!?；;，,\n]+[。？！!?；;，,]?/g)
+    ?.map((s) => s.trim())
+    .filter(Boolean) ?? [text];
+  const results = fragments.map((fragment) =>
+    answerPart(fragment, active, partner, memories),
+  );
+  const unresolved = fragments.flatMap((fragment, i) =>
+    results[i].pending ? [unansweredPart(fragment)] : [],
+  );
+  return {
+    id: uid(),
+    from: '此间',
+    assistantFor: partner,
+    recipient: partner,
+    replyToId,
+    sentAt: Date.now(),
+    sources: [...new Set(results.flatMap((result) => result.sources))],
+    text: [...new Set(results.map((result) => result.text))].join('\n\n'),
+    pending: unresolved.length > 0,
+    unresolved,
   };
 }
