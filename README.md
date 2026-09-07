@@ -2,7 +2,21 @@
 
 这是一个根据「双方对自己和彼此的认识 → 关系知识库 → 忙碌时代理接待」构想制作的中文交互 Demo。以异地情侣林屿与许知夏作为虚构示例。
 
-## 打开体验
+## 一键下载体验
+
+**[下载 Demo 体验包（ZIP）](https://github.com/ebon-gryphon/cijian-demo/releases/latest/download/cijian-demo.zip)** · [查看版本与附件](https://github.com/ebon-gryphon/cijian-demo/releases/latest)
+
+1. 点击上方下载链接，保存 `cijian-demo.zip`（无需登录 GitHub）。
+2. 解压整个压缩包，打开 `cijian-demo` 文件夹。
+3. 双击 **index.html**，用 Chrome、Edge 或 Safari 开始体验。
+
+无需安装 Node.js、运行命令或填写 API Key。推荐在电脑浏览器体验；手机的文件预览器不一定能运行交互页面。不要直接在压缩包内打开文件。
+
+普通体验者选择 `cijian-demo.zip`，无需下载 GitHub 自动生成的 `Source code` 源码包。如果下载未开始，可进入版本页面，在 **Assets** 中选择体验包。
+
+体验包仅包含 `index.html` 和 `README.txt`。也可以在版本页面直接下载 `index.html`，保存到电脑后用浏览器打开；GitHub 文件预览页面不会运行 Demo。
+
+## 已有源码时打开体验
 
 直接双击本文件夹中的 **打开此间.html**。不需要启动服务，不需要 API Key；页面运行时不调用云端模型。请用 Safari、Chrome 或 Edge 打开。如果系统预览只显示代码，右键选择浏览器打开。
 
@@ -37,7 +51,7 @@
 
 ## 源码开发
 
-Node.js 22.13+（建议 24）。在本文件夹运行 `npm install` 后运行 `npm run dev`，打开终端显示的本地地址。已经在当前电脑安装好依赖。
+Node.js 22.13+（建议 24）。下载或克隆源码后，在本文件夹运行 `npm ci`，再运行 `npm run dev`，打开终端显示的本地地址。
 
 - `app/page.tsx`：界面、记忆管理、身份切换、消息交接。
 - `app/demo.ts`：数据结构、示例数据和接待规则。
@@ -49,8 +63,14 @@ Node.js 22.13+（建议 24）。在本文件夹运行 `npm install` 后运行 `n
 
 页面还在支持 WebMCP 的环境提供读取演示状态、发送演示消息的接口。未进行浏览器端 WebMCP 实测，不影响常规网页操作。
 
+## 制作下载包
+
+修改界面后，先运行 `npm run build` 和 `node scripts/build-offline.mjs` 更新离线页面，再运行 `python3 scripts/package-release.py`（需要 Python 3）。仅重新打包现有离线页面时，可直接运行最后一条命令。
+
+脚本会在 `.releases/` 生成 `cijian-demo.zip`、单独的 `index.html` 和 `SHA256SUMS.txt`。发布 GitHub Release 时上传这三个附件；此目录不会提交进源码。体验包不包含依赖、环境变量、本机缓存或用户的浏览器聊天记录。
+
 ## 后续接入真实产品
 
 先接入两人独立身份和服务端访问控制，再实现带来源和权限过滤的检索、模型回复和本人交接。判断产品价值的重点是双方是否愿意使用与是否减少漏接，而非单纯提高聊天时长。
 
-本次仅本地交付，没有部署网站。项目保留了初始化的 Sites 关联信息，但注册的空站点未发布。
+项目通过 GitHub 仓库与 Release 分发，没有部署在线网站。项目保留了初始化的 Sites 关联信息，但注册的空站点未发布。
