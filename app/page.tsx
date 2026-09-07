@@ -20,6 +20,9 @@ import {
   Quote,
   Leaf,
   ArrowLeftRight,
+  Bookmark,
+  ChevronDown,
+  Trash2,
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -33,6 +36,12 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Switch } from '@/components/ui/switch';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Dialog,
@@ -67,6 +76,16 @@ import {
   type PresenceMap,
   type PresenceEvent,
 } from './presence';
+import {
+  canFavorite,
+  ownFavorites,
+  saveFavorite,
+  editFavorite,
+  removeFavorite,
+  restoreFavorite,
+  parseFavorites,
+  type PrivateFavorite,
+} from './favorites';
 
 export default function Home() {
   const [view, setView] = useState('chat'),
@@ -84,6 +103,40 @@ export default function Home() {
     [loaded, setLoaded] = useState(false),
     [sourceIds, setSourceIds] = useState<string[] | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const [favorites, setFavorites] = useState<PrivateFavorite[]>([]);
+  const [favoriteSource, setFavoriteSource] = useState<Message | null>(null);
+  const [favoriteEditing, setFavoriteEditing] = useState<string | null>(null);
+  const [favoriteNote, setFavoriteNote] = useState('');
+  const [removedFavorite, setRemovedFavorite] =
+    useState<PrivateFavorite | null>(null);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  const myFavorites = ownFavorites(favorites, active);
+  const selectedFavorite = myFavorites.find((f) => f.id === favoriteEditing);
+  function openFavorite(message: Message) {
+    if (!canFavorite(message, active)) return;
+    const found = myFavorites.find((f) => f.source.messageId === message.id);
+    setFavoriteSource(message);
+    setFavoriteEditing(found?.id ?? null);
+    setFavoriteNote(found?.note ?? '');
+  }
+  function closeFavorite() {
+    setFavoriteSource(null);
+    setFavoriteEditing(null);
+    setFavoriteNote('');
+  }
+  function savePrivateFavorite() {
+    if (selectedFavorite)
+      setFavorites((all) =>
+        editFavorite(all, selectedFavorite.id, active, favoriteNote),
+      );
+    else if (favoriteSource)
+      setFavorites((all) =>
+        saveFavorite(all, favoriteSource, active, favoriteNote, Date.now()),
+      );
+    else return;
+    closeFavorite();
+    setNotice('已存入我的收藏，仅自己可见');
+  }
   const [now, setNow] = useState(0),
     [returned, setReturned] = useState<Person | null>(null);
   const [reviewing, setReviewing] = useState<Memory | null>(null),
@@ -109,7 +162,7 @@ export default function Home() {
   function takeOver() {
     changePresence('takeover');
     setReturned(null);
-    setNotice('已接回对话，助手停止代回；留言仍等你逐条回应');
+    setNotice('已接回对话');
   }
   function switchPerson() {
     const time = Date.now();
@@ -125,7 +178,11 @@ export default function Home() {
     setEditing(null);
     setReviewing(null);
     setReplyTo(null);
-    setNotice('已切换到' + partner + '；原身份按离开页面计时');
+    closeFavorite();
+    setRemovedFavorite(null);
+    setHighlighted(null);
+    if (view === 'favorites') setView('chat');
+    setNotice('已切换到' + partner);
   }
   const [editing, setEditing] = useState<Memory | null>(null),
     [draft, setDraft] = useState(''),
@@ -156,6 +213,15 @@ export default function Home() {
         }
       }
     } catch {}
+    try {
+      setFavorites(
+        parseFavorites(
+          JSON.parse(
+            localStorage.getItem('between-us-private-favorites-v1') ?? '[]',
+          ),
+        ),
+      );
+    } catch {}
     setLoaded(true);
   }, []);
   useEffect(() => {
@@ -169,6 +235,17 @@ export default function Home() {
         setNotice('浏览器未允许保存，当前体验仍可继续。');
       }
   }, [memories, messages, presence, reception, active, loaded]);
+  useEffect(() => {
+    if (loaded)
+      try {
+        localStorage.setItem(
+          'between-us-private-favorites-v1',
+          JSON.stringify(favorites),
+        );
+      } catch {
+        setNotice('浏览器未允许保存，收藏仅在当前页面保留');
+      }
+  }, [favorites, loaded]);
   useEffect(() => {
     if (!loaded) return;
     function leave() {
@@ -200,8 +277,14 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [presence, now]);
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [messages, view]);
+    if (view !== 'chat') return;
+    if (highlighted) {
+      document
+        .getElementById('message-' + highlighted)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else
+      end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [messages, view, highlighted]);
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(''), 3500);
@@ -213,9 +296,17 @@ export default function Home() {
     changePresence('takeover');
     setReturned(null);
     setInput('');
+    setHighlighted(null);
     const next: Message[] = [
       ...messages,
-      { id: uid(), from: active, text: clean, sources: [], recipient: partner },
+      {
+        id: uid(),
+        from: active,
+        text: clean,
+        sources: [],
+        recipient: partner,
+        sentAt: Date.now(),
+      },
     ];
     if (canReceive(presence[partner], reception[partner], Date.now()))
       next.push(answer(clean, active, partner, memories));
@@ -331,6 +422,7 @@ export default function Home() {
     { id: 'chat', name: '此刻的我们', icon: MessageCircle },
     { id: 'perspectives', name: '彼此的模样', icon: Layers },
     { id: 'memories', name: '共同记忆', icon: BookHeart },
+    { id: 'favorites', name: '我的收藏', icon: Bookmark },
     { id: 'handoff', name: '回来接着聊', icon: Inbox },
   ];
   function edit(m?: Memory) {
@@ -423,6 +515,7 @@ export default function Home() {
         from: active,
         text: humanReply.trim(),
         recipient: original.from as Person,
+        sentAt: Date.now(),
         sources: [],
       },
     ]);
@@ -531,6 +624,7 @@ export default function Home() {
     chat: '此刻的我们',
     perspectives: '彼此的模样',
     memories: '共同记忆',
+    favorites: '我的收藏',
     handoff: '回来接着聊',
   };
   return (
@@ -631,18 +725,22 @@ export default function Home() {
                   ? '隔着距离，也接得住日常。'
                   : view === 'perspectives'
                     ? '在彼此眼里，认识我们。'
-                    : view === 'memories'
-                      ? '把小事，慢慢记成我们。'
-                      : '那些想说的话，都在这里。'}
+                    : view === 'favorites'
+                      ? '有些话，留给自己记得。'
+                      : view === 'memories'
+                        ? '把小事，慢慢记成我们。'
+                        : '那些想说的话，都在这里。'}
               </h1>
               <p>
                 {view === 'chat'
                   ? '你可以先说，等有空的人回来接着听。'
                   : view === 'perspectives'
                     ? '我的感受、你的理解，都值得有自己的位置。'
-                    : view === 'memories'
-                      ? '每一段记忆，都保留讲述它的人。'
-                      : '接回对话，也接住对方的心情。'}
+                    : view === 'favorites'
+                      ? '对方的原话，和只属于你的心情。'
+                      : view === 'memories'
+                        ? '每一段记忆，都保留讲述它的人。'
+                        : '接回对话，也接住对方的心情。'}
               </p>
             </div>
             <button
@@ -664,31 +762,43 @@ export default function Home() {
                     <strong>
                       {active} <small>你</small>
                     </strong>
-                    <p>
-                      <span
-                        className={
-                          'status-dot ' + (busy[active] ? 'amber' : '')
-                        }
-                      />
-                      {presenceLabel(presence[active], now)} ·{' '}
-                      {active === '林屿' ? '上海' : '杭州'}
-                    </p>
-                    <div className="presence-controls">
-                      <button
-                        className="outline-button"
-                        onClick={() => {
-                          changePresence('busy');
-                          setNotice(
-                            '已手动设为忙碌，返回页面也会保持；发送消息或接回后解除',
-                          );
-                        }}
-                        disabled={presence[active].manualBusy}
-                      >
-                        设为忙碌
-                      </button>
-                      <button className="primary-button" onClick={takeOver}>
-                        {busy[active] ? '我回来了，接回' : '在线 · 自动切换'}
-                      </button>
+                    <div className="self-status-row">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          className="status-trigger"
+                          aria-label="切换我的状态"
+                        >
+                          <span
+                            className={
+                              'status-dot ' + (busy[active] ? 'amber' : '')
+                            }
+                          />
+                          {busy[active] ? '忙碌' : '在线'}
+                          <ChevronDown size={13} />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="status-menu">
+                          <DropdownMenuItem onClick={takeOver}>
+                            在线
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              changePresence('busy');
+                              setNotice('已设为忙碌');
+                            }}
+                          >
+                            忙碌
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <span>{active === '林屿' ? '上海' : '杭州'}</span>
+                      {busy[active] && (
+                        <button
+                          className="text-button take-back"
+                          onClick={takeOver}
+                        >
+                          接回对话
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -714,27 +824,11 @@ export default function Home() {
                   </div>
                 </div>
               </section>
-              <div className="presence-explain">
-                <Clock3 size={16} />
-                <p>
-                  自动模式：离开页面或切到其他窗口 2
-                  分钟后，允许接待的助手才会回应新消息。返回立即暂停；手动忙碌会保留。
-                  <small>
-                    本机演示：切换体验身份也视为离开；关闭页面后不能继续接待，不会向对方显示离开时间。
-                  </small>
-                </p>
-              </div>
-              {returned === active && (
+              {returned === active && pending.length > 0 && (
                 <div className="return-banner" role="status">
                   <div>
-                    <strong>
-                      {presence[active].manualBusy
-                        ? '你回来了，仍保持手动忙碌'
-                        : '你回来了，助手已暂停代回'}
-                    </strong>
-                    <p>
-                      有 {pending.length} 条待回应留言，查看不会自动标记已处理。
-                    </p>
+                    <strong>欢迎回来</strong>
+                    <p>有 {pending.length} 条留言等你回应。</p>
                   </div>
                   <button
                     className="outline-button"
@@ -766,15 +860,11 @@ export default function Home() {
                       <p>
                         {busy[partner]
                           ? reception[partner]
-                            ? partner +
-                              (presence[partner].manualBusy
-                                ? '正在忙碌'
-                                : '暂时不在此间') +
-                              '，由其 AI 助手暂时接待，留言会留给本人'
-                            : '助手接待已关闭，消息会等本人回来'
+                            ? partner + '的 AI 助手正在接待'
+                            : '留言会留给' + partner
                           : presenceStatus(presence[partner], now) === 'grace'
-                            ? '对方暂时离开，助手尚未接待，留言等本人回复'
-                            : '本人在线 · 助手不代回'}
+                            ? '等' + partner + '回来接着聊'
+                            : partner + '在这里'}
                       </p>
                     </div>
                     <span className="private-tag">
@@ -795,9 +885,11 @@ export default function Home() {
                           'message ' +
                           (m.from === active ? 'mine' : '') +
                           ' ' +
-                          (m.from === '此间' ? 'assistant' : '')
+                          (m.from === '此间' ? 'assistant' : '') +
+                          (highlighted === m.id ? ' highlighted-message' : '')
                         }
                         key={m.id}
+                        id={'message-' + m.id}
                       >
                         {m.from !== active && (
                           <Avatar
@@ -828,6 +920,20 @@ export default function Home() {
                               <Clock3 size={12} />
                               已留给{m.recipient}本人回应
                             </span>
+                          )}
+                          {canFavorite(m, active) && (
+                            <button
+                              className="message-favorite"
+                              onClick={() => openFavorite(m)}
+                              aria-label={'记住这句话：' + m.text.slice(0, 24)}
+                            >
+                              <Bookmark size={13} />
+                              {myFavorites.some(
+                                (f) => f.source.messageId === m.id,
+                              )
+                                ? '已收藏 · 仅自己可见'
+                                : '记住这句话'}
+                            </button>
                           )}
                         </div>
                       </div>
@@ -894,7 +1000,7 @@ export default function Home() {
                     </div>
                     <h2>让话有所安放</h2>
                     <p>
-                      我的助手只在我手动忙碌或自动离开后接待。私人、存在分歧和未确认的理解都不会被引用。
+                      你不方便回复时，助手可以先接住日常。私有收藏不会成为回复的来源。
                     </p>
                     <div className="toggle-row">
                       <label htmlFor="auto">允许我的助手接待</label>
@@ -939,6 +1045,122 @@ export default function Home() {
                   </div>
                 </aside>
               </div>
+            </>
+          )}
+          {view === 'favorites' && (
+            <>
+              <div className="section-toolbar">
+                <span>
+                  <LockKeyhole size={17} />
+                  仅自己可见 · {myFavorites.length} 条收藏
+                </span>
+              </div>
+              <div className="favorites-grid">
+                {myFavorites
+                  .slice()
+                  .sort((a, b) => b.savedAt - a.savedAt)
+                  .map((f) => (
+                    <article className="favorite-card" key={f.id}>
+                      <div className="memory-meta">
+                        <Avatar person={f.source.speaker} mini />
+                        <span>
+                          {f.source.speaker}的原话 ·{' '}
+                          {f.source.sentAt === null
+                            ? '原消息未记录时间'
+                            : formatTime(f.source.sentAt)}
+                        </span>
+                      </div>
+                      <blockquote>{f.source.text}</blockquote>
+                      <div className="favorite-note">
+                        <span>我的备注</span>
+                        <p>{f.note || '还没有写下备注。'}</p>
+                      </div>
+                      <small>收藏于 {formatTime(f.savedAt)}</small>
+                      <div className="favorite-actions">
+                        <button
+                          className="text-button"
+                          onClick={() => {
+                            setFavoriteEditing(f.id);
+                            setFavoriteSource(null);
+                            setFavoriteNote(f.note);
+                          }}
+                        >
+                          <Pencil size={14} />
+                          编辑备注
+                        </button>
+                        <button
+                          className="text-button"
+                          disabled={
+                            !messages.some((m) => m.id === f.source.messageId)
+                          }
+                          onClick={() => {
+                            setHighlighted(f.source.messageId);
+                            setView('chat');
+                          }}
+                        >
+                          回到原对话
+                          <ChevronRight size={14} />
+                        </button>
+                        <button
+                          className="text-button"
+                          onClick={() => {
+                            setFavorites((all) =>
+                              removeFavorite(all, f.id, active),
+                            );
+                            setRemovedFavorite(f);
+                            setNotice('收藏已移除，原对话没有删除');
+                          }}
+                        >
+                          <Trash2 size={14} />
+                          移除收藏
+                        </button>
+                      </div>
+                      {!messages.some((m) => m.id === f.source.messageId) && (
+                        <small>原消息已无法定位，这里仍保留当时的原话。</small>
+                      )}
+                    </article>
+                  ))}
+              </div>
+              {myFavorites.length === 0 && (
+                <div className="empty-state">
+                  <Bookmark size={32} />
+                  <h2>把想记住的话，留在这里</h2>
+                  <p>
+                    点击对方消息下方的“记住这句话”。不会通知对方，也无需对方确认。
+                  </p>
+                  <button
+                    className="outline-button"
+                    onClick={() => setView('chat')}
+                  >
+                    去看看对话
+                  </button>
+                </div>
+              )}
+              {removedFavorite?.owner === active && (
+                <div className="favorite-undo" role="status">
+                  <span>已移除一条收藏，原对话仍保留。</span>
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      setFavorites((all) =>
+                        restoreFavorite(all, removedFavorite, active),
+                      );
+                      setRemovedFavorite(null);
+                    }}
+                  >
+                    撤销
+                  </button>
+                </div>
+              )}
+              <details className="private-boundary">
+                <summary>关于私有收藏</summary>
+                <p>
+                  收藏与备注不向对方显示，不通知、不计入共享记忆，也不会被接待助手引用。此处没有一键共享入口。
+                </p>
+                <p>
+                  当前是同机演示，切换身份并不构成真实访问控制；数据没有加密，请勿存放真实秘密。
+                </p>
+              </details>
             </>
           )}
           {view === 'perspectives' && (
@@ -1256,6 +1478,41 @@ export default function Home() {
         </DialogContent>
       </Dialog>
       <Dialog
+        open={favoriteSource !== null || selectedFavorite !== undefined}
+        onOpenChange={(o) => {
+          if (!o) closeFavorite();
+        }}
+      >
+        <DialogContent className="our-dialog">
+          <DialogTitle>
+            {selectedFavorite ? '我的收藏' : '记住这句话'}
+          </DialogTitle>
+          <DialogDescription>
+            仅自己可见，不通知对方，也不供接待助手使用。
+          </DialogDescription>
+          <div className="source-card">
+            <span className="pill">
+              {selectedFavorite?.source.speaker ?? favoriteSource?.from}的原话
+            </span>
+            <p>{selectedFavorite?.source.text ?? favoriteSource?.text}</p>
+          </div>
+          <label>
+            我的备注（选填）
+            <textarea
+              rows={4}
+              maxLength={600}
+              placeholder="留下一点此刻的想法……"
+              value={favoriteNote}
+              onChange={(e) => setFavoriteNote(e.target.value)}
+            />
+          </label>
+          <button className="primary-button" onClick={savePrivateFavorite}>
+            <LockKeyhole size={16} />
+            保存到我的收藏
+          </button>
+        </DialogContent>
+      </Dialog>
+      <Dialog
         open={reviewing !== null}
         onOpenChange={(o) => {
           if (!o) {
@@ -1443,6 +1700,16 @@ export default function Home() {
       )}
     </SidebarProvider>
   );
+}
+function formatTime(timestamp: number) {
+  return new Date(timestamp).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 }
 function Avatar({
   person,

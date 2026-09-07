@@ -1,6 +1,139 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
+.self-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 5px;
+  color: #81718e;
+  font-size: 14px;
+}
+.status-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  border: 0;
+  padding: 4px 0;
+  font: inherit;
+  color: #766286;
+}
+.status-menu {
+  min-width: 120px;
+}
+.self-status-row .take-back {
+  margin-top: 0;
+  font-size: 14px;
+}
+.message-favorite {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: #86738f;
+  padding: 5px 0;
+  margin-top: 3px;
+  font-size: 12px;
+}
+.highlighted-message .bubble {
+  outline: 2px solid #9980c9;
+  outline-offset: 3px;
+}
+.favorites-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.favorite-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  min-width: 0;
+}
+.favorite-card .memory-meta {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.favorite-card blockquote {
+  margin: 20px 0;
+  padding-left: 15px;
+  border-left: 3px solid #d6c9ed;
+  color: #665274;
+  font-size: 16px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.favorite-note {
+  background: #f6f3fb;
+  border-radius: 9px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.favorite-note > span {
+  font-size: 12px;
+  color: #897997;
+}
+.favorite-note p {
+  font-size: 16px;
+  line-height: 1.9;
+  margin-top: 5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.favorite-card > small {
+  display: block;
+  font-size: 12px;
+  color: #8c8097;
+}
+.favorite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 15px 0 6px;
+}
+.favorite-actions .text-button {
+  margin: 0;
+}
+.private-boundary {
+  margin-top: 24px;
+  font-size: 14px;
+  color: #82728e;
+  line-height: 1.9;
+}
+.private-boundary summary {
+  cursor: pointer;
+}
+.private-boundary p {
+  margin-top: 9px;
+}
+.favorite-undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 15px;
+  padding: 12px 16px;
+  background: #eee8f8;
+  border-radius: 10px;
+  margin-top: 20px;
+  font-size: 14px;
+}
+.favorite-undo .text-button {
+  margin: 0;
+}
+@media (max-width: 767px) {
+  .favorites-grid {
+    grid-template-columns: 1fr;
+  }
+  .favorite-card {
+    padding: 18px;
+  }
+}
 .presence-controls {
   display: flex;
   flex-wrap: wrap;

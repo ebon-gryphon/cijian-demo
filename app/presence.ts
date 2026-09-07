@@ -32,12 +32,10 @@ export function canReceive(state: Presence, enabled: boolean, now: number) {
 export function presenceLabel(state: Presence, now: number) {
   const status = presenceStatus(state, now);
   return status === 'busy'
-    ? '忙碌 · 手动设置'
-    : status === 'away'
-      ? '暂时不在此间'
-      : status === 'grace'
-        ? '暂时离开 · 等本人回复'
-        : '在线';
+    ? '忙碌'
+    : status === 'away' || status === 'grace'
+      ? '暂时离开'
+      : '在线';
 }
 export function restorePresence(
   saved: unknown,

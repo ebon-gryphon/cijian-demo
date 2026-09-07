@@ -25,6 +25,7 @@ export type Message = {
   handled?: boolean;
   pending?: boolean;
   assistantFor?: Person;
+  sentAt?: number;
 };
 export function memoryStatus(m: Memory) {
   return m.review ?? (m.confirmed ? 'confirmed' : 'pending');
