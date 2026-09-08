@@ -1,0 +1,1 @@
+ALTER TABLE `messages` ADD `unresolved_json` text DEFAULT '[]' NOT NULL;

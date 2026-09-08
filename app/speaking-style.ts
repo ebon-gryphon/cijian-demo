@@ -7,20 +7,33 @@ export type StyleSample = {
 };
 export type SpeakingStyle = {
   enabled: boolean;
-  instructions: string;
+  memorySummary: string;
+  memoryEdited: boolean;
   samples: StyleSample[];
 };
 export type SpeakingStyles = Record<Person, SpeakingStyle>;
 export function emptyStyle(): SpeakingStyle {
-  return { enabled: true, instructions: '', samples: [] };
+  return {
+    enabled: true,
+    memorySummary: '',
+    memoryEdited: false,
+    samples: [],
+  };
 }
 export function normalizeStyle(value: unknown): SpeakingStyle {
   if (!value || typeof value !== 'object') return emptyStyle();
   const v = value as Partial<SpeakingStyle>;
+  const memorySummary =
+    typeof v.memorySummary === 'string'
+      ? v.memorySummary.trim().slice(0, 500)
+      : '';
   return {
     enabled: v.enabled !== false,
-    instructions:
-      typeof v.instructions === 'string' ? v.instructions.slice(0, 800) : '',
+    memorySummary,
+    memoryEdited:
+      typeof v.memoryEdited === 'boolean'
+        ? v.memoryEdited
+        : Boolean(memorySummary),
     samples: Array.isArray(v.samples)
       ? v.samples
           .filter(
@@ -112,10 +125,14 @@ export function styleSummary(style: SpeakingStyle) {
     ].join('；') + '。'
   );
 }
+export function rememberedStyle(style: SpeakingStyle) {
+  return style.memorySummary.trim() || styleSummary(style);
+}
 export function styleContext(style: SpeakingStyle) {
   if (!style.enabled)
     return {
-      instructions: '使用自然、简洁的中性口吻，不模仿本人。',
+      rememberedStyle: '',
+      memoryEdited: false,
       examples: [] as string[],
     };
   // Corrections have priority; recent genuine messages supply the remaining examples.
@@ -124,8 +141,8 @@ export function styleContext(style: SpeakingStyle) {
     ...style.samples.filter((s) => s.source === 'message').slice(-8),
   ];
   return {
-    instructions: style.instructions,
-    summary: styleSummary(style),
+    rememberedStyle: rememberedStyle(style),
+    memoryEdited: style.memoryEdited,
     preferredExamples: style.samples
       .filter((s) => s.source === 'correction')
       .slice(-4)

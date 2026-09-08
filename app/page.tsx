@@ -113,10 +113,10 @@ import {
   saveAttachmentBlob,
 } from './attachments';
 import {
-  emptyStyle,
   restoreStyles,
   learnMessage,
   correctStyle,
+  rememberedStyle,
   styleSummary,
   type SpeakingStyles,
 } from './speaking-style';
@@ -156,7 +156,11 @@ export default function Home() {
   const [styles, setStyles] = useState<SpeakingStyles>(() =>
     restoreStyles(null),
   );
-  const [styleDraft, setStyleDraft] = useState('');
+  const [styleMemoryDraft, setStyleMemoryDraft] = useState('');
+  const [editingStyleMemory, setEditingStyleMemory] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [settingsTab, setSettingsTab] = useState('reception');
   const [correction, setCorrection] = useState<Message | null>(null);
   const [correctionText, setCorrectionText] = useState('');
   const [generating, setGenerating] = useState<Person | null>(null);
@@ -225,10 +229,27 @@ export default function Home() {
     [humanReply, setHumanReply] = useState(''),
     [keywords, setKeywords] = useState('');
   function openSettings() {
+    setSettingsTab('reception');
+    prepareSettingsDrafts();
+  }
+  function prepareSettingsDrafts() {
     setModelDraft({ ...modelSettings[active] });
-    setStyleDraft(styles[active].instructions);
+    setStyleMemoryDraft(rememberedStyle(styles[active]));
+    setEditingStyleMemory(false);
     setShowApiKey(false);
     setSettings(true);
+  }
+  function finishOnboarding() {
+    try {
+      localStorage.setItem('between-us-onboarding-v1', 'seen');
+    } catch {}
+    setOnboardingOpen(false);
+    setOnboardingStep(0);
+  }
+  function openOnboarding() {
+    setSettings(false);
+    setOnboardingStep(0);
+    setOnboardingOpen(true);
   }
   useEffect(() => {
     try {
@@ -258,6 +279,8 @@ export default function Home() {
           if (people.includes(s.active)) setActive(s.active);
         }
       }
+      if (localStorage.getItem('between-us-onboarding-v1') !== 'seen')
+        setOnboardingOpen(true);
     } catch {}
     setLoaded(true);
   }, []);
@@ -845,6 +868,9 @@ export default function Home() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={openSettings}>
                 <Settings2 size={16} /> 设置
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={openOnboarding}>
+                <BookHeart size={16} /> 使用引导
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1444,6 +1470,83 @@ export default function Home() {
         </footer>
       </main>
       <Dialog
+        open={onboardingOpen}
+        onOpenChange={(open) => {
+          if (!open) finishOnboarding();
+        }}
+      >
+        <DialogContent className="our-dialog onboarding-dialog">
+          <div className="onboarding-progress" aria-label="使用引导进度">
+            {[0, 1, 2].map((step) => (
+              <span
+                key={step}
+                className={step === onboardingStep ? 'active' : ''}
+              />
+            ))}
+          </div>
+          {onboardingStep === 0 ? (
+            <div className="onboarding-content">
+              <span className="onboarding-icon">
+                <Bot size={26} />
+              </span>
+              <DialogTitle>忙的时候，先帮你接住日常</DialogTitle>
+              <DialogDescription>
+                你离开或标记忙碌后，AI
+                助手可以回应普通日常。涉及感情态度、决定和承诺的话，会留给你本人。
+              </DialogDescription>
+            </div>
+          ) : onboardingStep === 1 ? (
+            <div className="onboarding-content">
+              <span className="onboarding-icon">
+                <BookHeart size={26} />
+              </span>
+              <DialogTitle>重要的事，只从确认过的记忆里来</DialogTitle>
+              <DialogDescription>
+                共同记忆经双方确认后才能被助手引用。带有记忆来源的回复可以随时查看，有分歧的内容不再使用。
+              </DialogDescription>
+            </div>
+          ) : (
+            <div className="onboarding-content">
+              <span className="onboarding-icon">
+                <Sparkles size={26} />
+              </span>
+              <DialogTitle>助手会自己慢慢学会</DialogTitle>
+              <DialogDescription>
+                你不需要先填风格设置。AI
+                会根据你亲自说过的话学习表达；如果它理解错了，你随时可以修改或删除这些口吻记忆。
+              </DialogDescription>
+            </div>
+          )}
+          <div className="onboarding-actions">
+            <button className="text-button" onClick={finishOnboarding}>
+              跳过
+            </button>
+            <div>
+              {onboardingStep > 0 && (
+                <button
+                  className="outline-button"
+                  onClick={() => setOnboardingStep((step) => step - 1)}
+                >
+                  上一步
+                </button>
+              )}
+              {onboardingStep < 2 ? (
+                <button
+                  className="primary-button"
+                  onClick={() => setOnboardingStep((step) => step + 1)}
+                >
+                  继续
+                </button>
+              ) : (
+                <button className="primary-button" onClick={finishOnboarding}>
+                  开始体验
+                </button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
         open={sourceIds !== null}
         onOpenChange={(o) => !o && setSourceIds(null)}
       >
@@ -1484,11 +1587,15 @@ export default function Home() {
             当前设置属于{active}
             ，只影响当前浏览器里的演示空间。对方需切换身份后自行设置。
           </DialogDescription>
-          <Tabs defaultValue="reception" className="settings-tabs">
+          <Tabs
+            value={settingsTab}
+            onValueChange={setSettingsTab}
+            className="settings-tabs"
+          >
             <TabsList className="settings-tab-list">
               <TabsTrigger value="reception">接待设置</TabsTrigger>
               <TabsTrigger value="model">模型设置</TabsTrigger>
-              <TabsTrigger value="style">我的说话方式</TabsTrigger>
+              <TabsTrigger value="style">口吻记忆</TabsTrigger>
             </TabsList>
             <TabsContent value="reception" className="settings-panel">
               <div className="toggle-row">
@@ -1669,7 +1776,7 @@ export default function Home() {
             </TabsContent>
             <TabsContent value="style" className="settings-panel style-panel">
               <div className="toggle-row">
-                <label htmlFor="style-enabled">学习并使用我的说话方式</label>
+                <label htmlFor="style-enabled">让助手自动学习我的表达</label>
                 <Switch
                   id="style-enabled"
                   checked={styles[active].enabled}
@@ -1683,65 +1790,117 @@ export default function Home() {
                 />
               </div>
               <p className="info-note">
-                只学习你接下来亲自发出的消息与口吻修正，不学习对方或 AI
-                的回复。关闭后暂停学习和模仿。
+                不用先填风格选项。助手只学习你亲自发出的新消息和口吻修正，不学习对方或
+                AI 的回复。
               </p>
-              <div className="style-summary">
-                <strong>目前记住的习惯</strong>
-                <p>{styleSummary(styles[active])}</p>
-                <span>
-                  {styles[active].samples.length} 条口吻样本 · 仅保存在此浏览器
-                </span>
+              <div className="communication-section">
+                <div className="communication-heading">
+                  <div>
+                    <strong>AI 目前这样理解你</strong>
+                    <p>它会随你的新表达继续调整。</p>
+                  </div>
+                  <span>
+                    {styles[active].memoryEdited
+                      ? '你修改过'
+                      : styles[active].samples.length
+                        ? 'AI 自动归纳'
+                        : '学习中'}
+                  </span>
+                </div>
+                {editingStyleMemory ? (
+                  <div className="memory-editor">
+                    <textarea
+                      id="style-memory"
+                      aria-label="修改 AI 对你的口吻记忆"
+                      rows={4}
+                      maxLength={500}
+                      value={styleMemoryDraft}
+                      onChange={(event) =>
+                        setStyleMemoryDraft(event.target.value)
+                      }
+                    />
+                    <div className="memory-editor-actions">
+                      <button
+                        className="text-button"
+                        onClick={() => {
+                          setStyleMemoryDraft(rememberedStyle(styles[active]));
+                          setEditingStyleMemory(false);
+                        }}
+                      >
+                        取消
+                      </button>
+                      {styles[active].memoryEdited && (
+                        <button
+                          className="outline-button"
+                          onClick={() => {
+                            cancelReception();
+                            setStyles((all) => ({
+                              ...all,
+                              [active]: {
+                                ...all[active],
+                                memorySummary: '',
+                                memoryEdited: false,
+                              },
+                            }));
+                            setStyleMemoryDraft(styleSummary(styles[active]));
+                            setEditingStyleMemory(false);
+                            setNotice('已恢复 AI 自动归纳');
+                          }}
+                        >
+                          恢复自动归纳
+                        </button>
+                      )}
+                      <button
+                        className="primary-button"
+                        onClick={() => {
+                          const memorySummary = styleMemoryDraft.trim();
+                          cancelReception();
+                          setStyles((all) => ({
+                            ...all,
+                            [active]: {
+                              ...all[active],
+                              memorySummary,
+                              memoryEdited: Boolean(memorySummary),
+                            },
+                          }));
+                          setEditingStyleMemory(false);
+                          setNotice(
+                            memorySummary
+                              ? '已按你的修改更新口吻记忆'
+                              : '已恢复 AI 自动归纳',
+                          );
+                        }}
+                      >
+                        保存修改
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="style-memory-copy">
+                      {rememberedStyle(styles[active])}
+                    </p>
+                    {(styles[active].samples.length > 0 ||
+                      styles[active].memorySummary) && (
+                      <button
+                        className="memory-edit-button"
+                        onClick={() => {
+                          setStyleMemoryDraft(rememberedStyle(styles[active]));
+                          setEditingStyleMemory(true);
+                        }}
+                      >
+                        <Pencil size={15} /> 这里理解得不对，我来修改
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
-              <label htmlFor="style-instructions">我希望怎么说话</label>
-              <textarea
-                id="style-instructions"
-                rows={3}
-                maxLength={800}
-                value={styleDraft}
-                onChange={(e) => setStyleDraft(e.target.value)}
-                placeholder="例如：说短一点，少用表情，不要突然叫亲密昵称。"
-              />
-              <div className="model-save-row">
-                <button
-                  className="text-button"
-                  onClick={() => {
-                    cancelReception();
-                    setStyles((all) => ({
-                      ...all,
-                      [active]: {
-                        ...emptyStyle(),
-                        enabled: all[active].enabled,
-                      },
-                    }));
-                    setStyleDraft('');
-                    setNotice(
-                      '已清除口吻样本与偏好，原聊天保留；不会重新学习旧消息',
-                    );
-                  }}
-                >
-                  清除口吻记忆
-                </button>
-                <button
-                  className="primary-button"
-                  onClick={() => {
-                    cancelReception();
-                    setStyles((all) => ({
-                      ...all,
-                      [active]: {
-                        ...all[active],
-                        instructions: styleDraft.trim(),
-                      },
-                    }));
-                    setNotice('已保存你的表达偏好');
-                  }}
-                >
-                  保存表达偏好
-                </button>
-              </div>
+              <p className="memory-source-note">
+                如果某句 AI 回复不像你，也可以在该消息下点“这句不像我”来教它。
+              </p>
               {styles[active].samples.length > 0 && (
                 <details className="style-samples">
-                  <summary>查看和整理口吻样本</summary>
+                  <summary>查看 AI 学习过的表达</summary>
                   {[...styles[active].samples].reverse().map((sample) => (
                     <div className="style-sample" key={sample.id}>
                       <div>
@@ -1773,6 +1932,34 @@ export default function Home() {
                   ))}
                 </details>
               )}
+              <div className="style-memory-footer">
+                <span>
+                  {styles[active].samples.length} 条学习样本 · 仅保存在此浏览器
+                </span>
+                {(styles[active].samples.length > 0 ||
+                  styles[active].memorySummary) && (
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      cancelReception();
+                      setStyles((all) => ({
+                        ...all,
+                        [active]: {
+                          ...all[active],
+                          memorySummary: '',
+                          memoryEdited: false,
+                          samples: [],
+                        },
+                      }));
+                      setStyleMemoryDraft('');
+                      setEditingStyleMemory(false);
+                      setNotice('已清除口吻记忆与学习样本，不会重新扫描旧消息');
+                    }}
+                  >
+                    清除学习记录
+                  </button>
+                )}
+              </div>
             </TabsContent>
           </Tabs>
         </DialogContent>
@@ -2015,6 +2202,19 @@ export default function Home() {
             当前为体验版，正式账号登录尚未开放。可以选择一个演示身份继续体验。
           </DialogDescription>
           <div className="account-choices">
+            <button
+              className="primary-button online-entry-link"
+              onClick={() => {
+                if (window.location.protocol === 'file:') {
+                  setNotice('联机测试需要打开网页版本');
+                  setLoginOpen(false);
+                  return;
+                }
+                window.location.assign('/online');
+              }}
+            >
+              <LogIn size={16} /> 两台设备联机测试
+            </button>
             {people.map((person) => (
               <button
                 className="outline-button"

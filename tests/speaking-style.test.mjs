@@ -6,6 +6,7 @@ import {
   learnMessage,
   correctStyle,
   styleContext,
+  rememberedStyle,
 } from '../app/speaking-style.ts';
 
 test('learns only the author and never learns assistant messages', () => {
@@ -34,7 +35,8 @@ test('disabled styles neither collect messages nor expose existing examples', ()
   const styles = restoreStyles({
     林屿: {
       enabled: false,
-      instructions: '叫宝贝',
+      memorySummary: '叫宝贝',
+      memoryEdited: true,
       samples: [{ id: 'a', text: '宝贝呀', source: 'message' }],
     },
   });
@@ -68,4 +70,21 @@ test('bounded samples and clearing start fresh without scanning old messages', (
     styles.林屿.samples.map((s) => s.id),
     ['new'],
   );
+});
+test('editable memory overrides automatic learning and is exposed to the model', () => {
+  const styles = restoreStyles({
+    林屿: {
+      enabled: true,
+      memorySummary: '  喜欢先说重点，不用客套。  ',
+      memoryEdited: true,
+      samples: [],
+    },
+  });
+  assert.equal(rememberedStyle(styles.林屿), '喜欢先说重点，不用客套。');
+  assert.equal(styleContext(styles.林屿).memoryEdited, true);
+});
+test('removed legacy instructions no longer affect style memory', () => {
+  const style = restoreStyles({ 林屿: { instructions: '少说一点' } }).林屿;
+  assert.equal(style.memorySummary, '');
+  assert.equal(style.memoryEdited, false);
 });
