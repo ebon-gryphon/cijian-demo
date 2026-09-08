@@ -22,6 +22,13 @@ import {
   ChevronDown,
   LogIn,
   UserRound,
+  Bot,
+  Eye,
+  EyeOff,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
+  X,
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -35,6 +42,14 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -53,7 +68,6 @@ import {
   initialMemories,
   initialMessages,
   uid,
-  answer,
   memoryStatus,
   canReview,
   reviewMemory,
@@ -65,6 +79,7 @@ import {
   completeHandoff,
   type Person,
   type Memory,
+  type MemoryAttachment,
   type Message,
 } from './demo';
 import {
@@ -79,6 +94,39 @@ import {
   type PresenceMap,
   type PresenceEvent,
 } from './presence';
+import {
+  DEFAULT_MODEL_SETTINGS,
+  MODEL_PROVIDERS,
+  modelDisplayName,
+  modelSettingsIssue,
+  normalizeModelSettings,
+  restoreModelSettings,
+  type ModelProvider,
+  type ModelSettings,
+} from './model-settings';
+import {
+  attachmentIssue,
+  attachmentMetadata,
+  deleteAttachmentBlob,
+  formatFileSize,
+  readAttachmentBlob,
+  saveAttachmentBlob,
+} from './attachments';
+import {
+  emptyStyle,
+  restoreStyles,
+  learnMessage,
+  correctStyle,
+  styleSummary,
+  type SpeakingStyles,
+} from './speaking-style';
+import {
+  fallbackReply,
+  requestReception,
+  type ReceptionInput,
+} from './reception-model';
+
+type DraftAttachment = MemoryAttachment & { file?: File };
 
 export default function Home() {
   const [view, setView] = useState('chat'),
@@ -98,6 +146,29 @@ export default function Home() {
   const end = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(0);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [modelSettings, setModelSettings] = useState<
+    Record<Person, ModelSettings>
+  >(() => restoreModelSettings(null));
+  const [modelDraft, setModelDraft] = useState<ModelSettings>({
+    ...DEFAULT_MODEL_SETTINGS,
+  });
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [styles, setStyles] = useState<SpeakingStyles>(() =>
+    restoreStyles(null),
+  );
+  const [styleDraft, setStyleDraft] = useState('');
+  const [correction, setCorrection] = useState<Message | null>(null);
+  const [correctionText, setCorrectionText] = useState('');
+  const [generating, setGenerating] = useState<Person | null>(null);
+  const inFlight = useRef<{
+    controller: AbortController;
+    person: Person;
+  } | null>(null);
+  function cancelReception() {
+    inFlight.current?.controller.abort();
+    inFlight.current = null;
+    setGenerating(null);
+  }
   const [reviewing, setReviewing] = useState<Memory | null>(null),
     [feedback, setFeedback] = useState('');
   const auto = reception[active];
@@ -106,6 +177,7 @@ export default function Home() {
     许知夏: canReceive(presence.许知夏, true, now),
   };
   function setAuto(enabled: boolean) {
+    if (!enabled && inFlight.current?.person === active) cancelReception();
     setReception((s) => ({ ...s, [active]: enabled }));
   }
   function changePresence(event: PresenceEvent) {
@@ -117,10 +189,14 @@ export default function Home() {
     setNow(time);
   }
   function takeOver() {
+    if (inFlight.current?.person === active) cancelReception();
     changePresence('takeover');
     setNotice('已接回对话');
   }
   function switchPerson() {
+    cancelReception();
+    setSettings(false);
+    setCorrection(null);
     const time = Date.now();
     setPresence((s) => ({
       ...s,
@@ -141,9 +217,19 @@ export default function Home() {
     [subject, setSubject] = useState<Person | '我们'>(active),
     [filter, setFilter] = useState('all'),
     [settings, setSettings] = useState(false);
+  const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>(
+      [],
+    ),
+    [savingMemory, setSavingMemory] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null),
     [humanReply, setHumanReply] = useState(''),
     [keywords, setKeywords] = useState('');
+  function openSettings() {
+    setModelDraft({ ...modelSettings[active] });
+    setStyleDraft(styles[active].instructions);
+    setShowApiKey(false);
+    setSettings(true);
+  }
   useEffect(() => {
     try {
       const raw = localStorage.getItem('between-us-demo-v1');
@@ -157,6 +243,18 @@ export default function Home() {
             林屿: s.reception?.林屿 ?? s.auto ?? true,
             许知夏: s.reception?.许知夏 ?? s.auto ?? true,
           });
+          const restoredModels = restoreModelSettings(s.modelSettings);
+          try {
+            const keys = JSON.parse(
+              sessionStorage.getItem('between-us-model-keys') || '{}',
+            );
+            for (const person of people) {
+              if (typeof keys[person] === 'string')
+                restoredModels[person].apiKey = keys[person];
+            }
+          } catch {}
+          setModelSettings(restoredModels);
+          setStyles(restoreStyles(s.speakingStyles));
           if (people.includes(s.active)) setActive(s.active);
         }
       }
@@ -168,12 +266,54 @@ export default function Home() {
       try {
         localStorage.setItem(
           'between-us-demo-v1',
-          JSON.stringify({ memories, messages, presence, reception, active }),
+          JSON.stringify({
+            memories,
+            messages,
+            presence,
+            reception,
+            modelSettings: Object.fromEntries(
+              people.map((p) => [p, { ...modelSettings[p], apiKey: '' }]),
+            ),
+            speakingStyles: styles,
+            active,
+          }),
+        );
+        sessionStorage.setItem(
+          'between-us-model-keys',
+          JSON.stringify(
+            Object.fromEntries(people.map((p) => [p, modelSettings[p].apiKey])),
+          ),
         );
       } catch {
         setNotice('浏览器未允许保存，当前体验仍可继续。');
       }
-  }, [memories, messages, presence, reception, active, loaded]);
+  }, [
+    memories,
+    messages,
+    presence,
+    reception,
+    modelSettings,
+    styles,
+    active,
+    loaded,
+  ]);
+  useEffect(
+    () => () => {
+      inFlight.current?.controller.abort();
+    },
+    [],
+  );
+  useEffect(() => {
+    cancelReception();
+  }, [memories]);
+  useEffect(() => {
+    const flight = inFlight.current;
+    if (
+      flight &&
+      !canReceive(presence[flight.person], reception[flight.person], now)
+    )
+      cancelReception();
+  }, [presence, reception, now]);
   useEffect(() => {
     if (!loaded) return;
     function leave() {
@@ -212,26 +352,71 @@ export default function Home() {
     const t = setTimeout(() => setNotice(''), 3500);
     return () => clearTimeout(t);
   }, [notice]);
-  function send(text = input) {
+  async function send(text = input) {
     const clean = text.trim();
-    if (!clean) return;
+    if (!clean || !loaded) return;
+    if (inFlight.current?.person === partner) {
+      setNotice('助手正在回复，稍等一下');
+      return;
+    }
+    cancelReception();
     changePresence('takeover');
     setInput('');
     const incomingId = uid();
-    const next: Message[] = [
-      ...messages,
-      {
-        id: incomingId,
-        from: active,
-        text: clean,
-        sources: [],
-        recipient: partner,
-        sentAt: Date.now(),
-      },
-    ];
-    if (canReceive(presence[partner], reception[partner], Date.now()))
-      next.push(answer(clean, active, partner, memories, incomingId));
-    setMessages(next);
+    const incoming: Message = {
+      id: incomingId,
+      from: active,
+      text: clean,
+      sources: [],
+      recipient: partner,
+      sentAt: Date.now(),
+    };
+    setMessages((all) => [...all, incoming]);
+    setStyles((all) => learnMessage(all, incoming));
+    if (!canReceive(presence[partner], reception[partner], Date.now())) return;
+    const payload: ReceptionInput = {
+      text: clean,
+      active,
+      partner,
+      memories,
+      messages: [...messages, incoming],
+      style: styles[partner],
+      replyToId: incomingId,
+    };
+    if (
+      !modelSettings[partner].apiKey ||
+      window.location.protocol === 'file:'
+    ) {
+      setMessages((all) => [...all, fallbackReply(payload)]);
+      if (window.location.protocol === 'file:' && modelSettings[partner].apiKey)
+        setNotice('联网模型请在网页版本中使用，离线页面使用基础接待');
+      return;
+    }
+    const controller = new AbortController();
+    inFlight.current = { controller, person: partner };
+    setGenerating(partner);
+    try {
+      const reply = await requestReception(
+        payload,
+        modelSettings[partner],
+        controller.signal,
+      );
+      if (!controller.signal.aborted) setMessages((all) => [...all, reply]);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setMessages((all) => [...all, fallbackReply(payload, true)]);
+        setNotice(
+          error instanceof Error
+            ? error.message
+            : '模型暂时无法回复，已使用基础接待',
+        );
+      }
+    } finally {
+      if (inFlight.current?.controller === controller) {
+        inFlight.current = null;
+        setGenerating(null);
+      }
+    }
   }
   const toolState = useRef({
     active,
@@ -297,7 +482,7 @@ export default function Home() {
       {
         name: 'send_relationship_demo_message',
         description:
-          'Send a message as the current fictional identity into this local demo. Produces a simulated reply only when the partner is busy and reception is enabled. Never sends to real people.',
+          'Send a message as the current fictional identity into this local demo. When reception is enabled and the partner is busy, configured model APIs receive conversation context and style samples to generate a reply. Without a key, uses local rules. Never sends to real people.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -338,6 +523,27 @@ export default function Home() {
   }, []);
   const pending = unansweredMessages(messages, active);
   const currentHandoff = pending.find((item) => item.message.id === replyTo);
+  function changeModelProvider(provider: ModelProvider) {
+    setModelDraft((current) => ({
+      ...current,
+      provider,
+      apiKey: '',
+      model: MODEL_PROVIDERS[provider].defaultModel,
+      baseUrl: '',
+    }));
+  }
+  function saveModelSettings() {
+    const next = normalizeModelSettings(modelDraft);
+    const issue = modelSettingsIssue(next);
+    if (issue) {
+      setNotice(issue);
+      return;
+    }
+    cancelReception();
+    setModelSettings((current) => ({ ...current, [active]: next }));
+    setModelDraft(next);
+    setNotice(`已为${active}保存 ${modelDisplayName(next)}`);
+  }
   const nav = [
     { id: 'chat', name: '此刻的我们', icon: MessageCircle },
     { id: 'perspectives', name: '彼此的模样', icon: Layers },
@@ -361,10 +567,43 @@ export default function Home() {
     setTitle(m?.title || '');
     setSubject(m?.subject || active);
     setKeywords(m?.tags.join('、') || '');
+    setDraftAttachments((m?.attachments ?? []).map((item) => ({ ...item })));
   }
-  function save() {
+  function addAttachments(files: FileList | null) {
+    if (!files?.length) return;
+    const next = [...draftAttachments];
+    let issue = '';
+    for (const file of Array.from(files)) {
+      const problem = attachmentIssue(file, next.length);
+      if (problem) {
+        issue ||= problem;
+        continue;
+      }
+      next.push({ ...attachmentMetadata(file, uid()), file });
+    }
+    setDraftAttachments(next);
+    if (issue) setNotice(issue);
+  }
+  async function save() {
     if (!editing || editing.owner !== active || !title.trim() || !draft.trim())
       return;
+    setSavingMemory(true);
+    const newAttachments = draftAttachments.filter((item) => item.file);
+    try {
+      await Promise.all(
+        newAttachments.map((item) => saveAttachmentBlob(item.id, item.file!)),
+      );
+    } catch {
+      await Promise.allSettled(
+        newAttachments.map((item) => deleteAttachmentBlob(item.id)),
+      );
+      setSavingMemory(false);
+      setNotice('附件保存失败，请检查浏览器存储空间');
+      return;
+    }
+    const attachments = draftAttachments.map(
+      ({ file: _file, ...item }) => item,
+    );
     const m = reviseMemory(
       { ...editing, id: editing.id === 'new' ? uid() : editing.id },
       {
@@ -380,6 +619,7 @@ export default function Home() {
               .filter(Boolean),
           ),
         ],
+        attachments,
       },
     );
     setMemories((prev) =>
@@ -387,6 +627,13 @@ export default function Home() {
         ? [...prev, m]
         : prev.map((x) => (x.id === m.id ? m : x)),
     );
+    const kept = new Set(attachments.map((item) => item.id));
+    await Promise.allSettled(
+      (editing.attachments ?? [])
+        .filter((item) => !kept.has(item.id))
+        .map((item) => deleteAttachmentBlob(item.id)),
+    );
+    setSavingMemory(false);
     setEditing(null);
     setNotice(
       subject !== active
@@ -425,18 +672,18 @@ export default function Home() {
       (m) => m.id === replyTo && m.recipient === active,
     );
     if (!original || original.from === '此间') return;
-    setMessages((all) => [
-      ...completeHandoff(all, replyTo, active),
-      {
-        id: uid(),
-        from: active,
-        text: humanReply.trim(),
-        replyToId: replyTo,
-        recipient: original.from as Person,
-        sentAt: Date.now(),
-        sources: [],
-      },
-    ]);
+    cancelReception();
+    const ownReply: Message = {
+      id: uid(),
+      from: active,
+      text: humanReply.trim(),
+      replyToId: replyTo,
+      recipient: original.from as Person,
+      sentAt: Date.now(),
+      sources: [],
+    };
+    setStyles((all) => learnMessage(all, ownReply));
+    setMessages((all) => [...completeHandoff(all, replyTo, active), ownReply]);
     changePresence('takeover');
     setReplyTo(null);
     setHumanReply('');
@@ -474,6 +721,13 @@ export default function Home() {
         </div>
         <h3>{m.title}</h3>
         <p>{m.text}</p>
+        {!!m.attachments?.length && (
+          <div className="memory-attachments">
+            {m.attachments.map((attachment) => (
+              <AttachmentView attachment={attachment} key={attachment.id} />
+            ))}
+          </div>
+        )}
         <div className="memory-meta">
           <Avatar person={m.owner} mini />
           <span>
@@ -589,7 +843,7 @@ export default function Home() {
               <DropdownMenuItem onClick={() => setLoginOpen(true)}>
                 <LogIn size={16} /> 登录 / 账号
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSettings(true)}>
+              <DropdownMenuItem onClick={openSettings}>
                 <Settings2 size={16} /> 设置
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -738,9 +992,9 @@ export default function Home() {
                       />
                       <button
                         className="chat-settings-button"
-                        aria-label="接待设置"
-                        title="接待设置"
-                        onClick={() => setSettings(true)}
+                        aria-label="助手设置"
+                        title="助手设置"
+                        onClick={openSettings}
                       >
                         <Settings2 size={16} />
                       </button>
@@ -778,6 +1032,27 @@ export default function Home() {
                         <div className="message-body">
                           <div className="sender">{assistantName(m)}</div>
                           <div className="bubble">{m.text}</div>
+                          {m.from === '此间' && (
+                            <div className="reply-tools">
+                              <span>
+                                {m.replyMode === 'model'
+                                  ? 'AI 接待'
+                                  : m.replyMode === 'fallback'
+                                    ? '模型连接失败 · 基础接待'
+                                    : '基础接待'}
+                              </span>
+                              {(m.assistantFor ?? m.recipient) === active && (
+                                <button
+                                  onClick={() => {
+                                    setCorrection(m);
+                                    setCorrectionText('');
+                                  }}
+                                >
+                                  这句不像我
+                                </button>
+                              )}
+                            </div>
+                          )}
                           {m.sources.length > 0 && (
                             <button
                               className="source-link"
@@ -797,6 +1072,11 @@ export default function Home() {
                         </div>
                       </div>
                     ))}
+                    {generating && (
+                      <p className="reply-loading" role="status">
+                        {generating}的 AI 助手正在整理回复…
+                      </p>
+                    )}
                     <div ref={end} />
                   </div>
                   <div className="composer">
@@ -836,14 +1116,18 @@ export default function Home() {
                       <button
                         className="send-button"
                         aria-label="发送消息"
-                        disabled={!input.trim()}
+                        disabled={
+                          !input.trim() || !loaded || generating === partner
+                        }
                       >
                         <ArrowUp size={21} />
                       </button>
                     </form>
                     <p>
                       <Sparkles size={12} />
-                      情境模拟回复 · 内容仅保存在此浏览器
+                      {modelSettings[partner].apiKey
+                        ? 'AI 接待始终标识身份 · 重要决定留给本人'
+                        : '尚未配置对方的模型 · 当前使用基础接待'}
                     </p>
                   </div>
                 </section>
@@ -1194,27 +1478,354 @@ export default function Home() {
         </DialogContent>
       </Dialog>
       <Dialog open={settings} onOpenChange={setSettings}>
-        <DialogContent className="our-dialog">
-          <DialogTitle>我们的接待约定</DialogTitle>
+        <DialogContent className="our-dialog settings-dialog">
+          <DialogTitle>设置</DialogTitle>
           <DialogDescription>
             当前设置属于{active}
             ，只影响当前浏览器里的演示空间。对方需切换身份后自行设置。
           </DialogDescription>
-          <div className="toggle-row">
-            <label htmlFor="setting-auto">离开或忙碌时允许我的助手接待</label>
-            <Switch
-              id="setting-auto"
-              checked={auto}
-              onCheckedChange={setAuto}
-            />
-          </div>
-          <div className="info-note">
-            离开页面 2
-            分钟后才进入自动接待；返回页面立即暂停。手动忙碌不受返回影响，点击“接回”或本人发送消息后解除。助手一直保留身份标识，重要感情和承诺交给本人。
-          </div>
-          <p className="info-note">
-            离开判断不代表真实忙碌。后台页面可能被浏览器暂停，关闭页面后不能继续接待；真实的跨设备服务需要服务端。
-          </p>
+          <Tabs defaultValue="reception" className="settings-tabs">
+            <TabsList className="settings-tab-list">
+              <TabsTrigger value="reception">接待设置</TabsTrigger>
+              <TabsTrigger value="model">模型设置</TabsTrigger>
+              <TabsTrigger value="style">我的说话方式</TabsTrigger>
+            </TabsList>
+            <TabsContent value="reception" className="settings-panel">
+              <div className="toggle-row">
+                <label htmlFor="setting-auto">
+                  离开或忙碌时允许我的助手接待
+                </label>
+                <Switch
+                  id="setting-auto"
+                  checked={auto}
+                  onCheckedChange={setAuto}
+                />
+              </div>
+              <div className="info-note">
+                离开页面 2
+                分钟后才进入自动接待；返回页面立即暂停。手动忙碌不受返回影响，点击“接回”或本人发送消息后解除。重要感情和承诺仍交给本人。
+              </div>
+              <p className="info-note">
+                离开判断不代表真实忙碌。关闭页面后不能继续接待；真实的跨设备服务需要服务端。
+              </p>
+            </TabsContent>
+            <TabsContent value="model" className="settings-panel">
+              <div className="model-setting-heading">
+                <span className="small-icon">
+                  <Bot size={18} />
+                </span>
+                <div>
+                  <strong>模型与 API</strong>
+                  <p>在这里完成密钥配置和模型切换。</p>
+                </div>
+              </div>
+              <div className="model-fields">
+                <div className="model-field">
+                  <span className="field-label">API 服务</span>
+                  <Select
+                    value={modelDraft.provider}
+                    onValueChange={(value) =>
+                      changeModelProvider(value as ModelProvider)
+                    }
+                  >
+                    <SelectTrigger aria-label="API 服务">
+                      <SelectValue>
+                        {MODEL_PROVIDERS[modelDraft.provider].label}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent align="start">
+                      {(Object.keys(MODEL_PROVIDERS) as ModelProvider[]).map(
+                        (provider) => (
+                          <SelectItem value={provider} key={provider}>
+                            {MODEL_PROVIDERS[provider].label}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="model-field">
+                  <label htmlFor="model-api-key">API Key</label>
+                  <div className="api-key-field">
+                    <Input
+                      id="model-api-key"
+                      type={showApiKey ? 'text' : 'password'}
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={modelDraft.apiKey}
+                      placeholder="sk-……"
+                      onChange={(event) =>
+                        setModelDraft((current) => ({
+                          ...current,
+                          apiKey: event.target.value,
+                        }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="api-key-visibility"
+                      aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
+                      onClick={() => setShowApiKey((visible) => !visible)}
+                    >
+                      {showApiKey ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
+                  </div>
+                </div>
+                <div className="model-field">
+                  <span className="field-label">使用模型</span>
+                  {modelDraft.provider === 'custom' ? (
+                    <Input
+                      aria-label="模型 ID"
+                      value={modelDraft.model}
+                      placeholder="输入模型 ID"
+                      onChange={(event) =>
+                        setModelDraft((current) => ({
+                          ...current,
+                          model: event.target.value,
+                        }))
+                      }
+                    />
+                  ) : (
+                    <Select
+                      value={modelDraft.model}
+                      onValueChange={(value) =>
+                        setModelDraft((current) => ({
+                          ...current,
+                          model: value as string,
+                        }))
+                      }
+                    >
+                      <SelectTrigger aria-label="使用模型">
+                        <SelectValue>
+                          {modelDisplayName(modelDraft)}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent align="start">
+                        {MODEL_PROVIDERS[modelDraft.provider].models.map(
+                          (model) => (
+                            <SelectItem value={model.value} key={model.value}>
+                              {model.label}
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+                {modelDraft.provider === 'custom' && (
+                  <div className="model-field">
+                    <label htmlFor="model-api-url">API 地址</label>
+                    <Input
+                      id="model-api-url"
+                      type="url"
+                      value={modelDraft.baseUrl}
+                      placeholder="https://api.example.com/v1"
+                      onChange={(event) =>
+                        setModelDraft((current) => ({
+                          ...current,
+                          baseUrl: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="model-save-row">
+                <span>当前：{modelDisplayName(modelSettings[active])}</span>
+                {modelSettings[active].apiKey && (
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      cancelReception();
+                      setModelSettings((all) => ({
+                        ...all,
+                        [active]: { ...all[active], apiKey: '' },
+                      }));
+                      setModelDraft((current) => ({ ...current, apiKey: '' }));
+                      setNotice('已清除本次会话的密钥，恢复基础接待');
+                    }}
+                  >
+                    停用模型
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={saveModelSettings}
+                >
+                  保存模型设置
+                </button>
+              </div>
+              <p className="info-note model-security-note">
+                保存后，接待会将近期对话、已确认记忆和口吻样本发送给所选模型服务。API
+                Key 仅保留在当前标签页会话中。演示身份切换不构成账号隔离。
+              </p>
+              {modelDraft.provider === 'custom' && (
+                <p className="info-note">
+                  自定义服务需兼容 Chat Completions 和 JSON
+                  输出，并由部署者允许该 HTTPS 地址。
+                </p>
+              )}
+            </TabsContent>
+            <TabsContent value="style" className="settings-panel style-panel">
+              <div className="toggle-row">
+                <label htmlFor="style-enabled">学习并使用我的说话方式</label>
+                <Switch
+                  id="style-enabled"
+                  checked={styles[active].enabled}
+                  onCheckedChange={(enabled) => {
+                    cancelReception();
+                    setStyles((all) => ({
+                      ...all,
+                      [active]: { ...all[active], enabled },
+                    }));
+                  }}
+                />
+              </div>
+              <p className="info-note">
+                只学习你接下来亲自发出的消息与口吻修正，不学习对方或 AI
+                的回复。关闭后暂停学习和模仿。
+              </p>
+              <div className="style-summary">
+                <strong>目前记住的习惯</strong>
+                <p>{styleSummary(styles[active])}</p>
+                <span>
+                  {styles[active].samples.length} 条口吻样本 · 仅保存在此浏览器
+                </span>
+              </div>
+              <label htmlFor="style-instructions">我希望怎么说话</label>
+              <textarea
+                id="style-instructions"
+                rows={3}
+                maxLength={800}
+                value={styleDraft}
+                onChange={(e) => setStyleDraft(e.target.value)}
+                placeholder="例如：说短一点，少用表情，不要突然叫亲密昵称。"
+              />
+              <div className="model-save-row">
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    cancelReception();
+                    setStyles((all) => ({
+                      ...all,
+                      [active]: {
+                        ...emptyStyle(),
+                        enabled: all[active].enabled,
+                      },
+                    }));
+                    setStyleDraft('');
+                    setNotice(
+                      '已清除口吻样本与偏好，原聊天保留；不会重新学习旧消息',
+                    );
+                  }}
+                >
+                  清除口吻记忆
+                </button>
+                <button
+                  className="primary-button"
+                  onClick={() => {
+                    cancelReception();
+                    setStyles((all) => ({
+                      ...all,
+                      [active]: {
+                        ...all[active],
+                        instructions: styleDraft.trim(),
+                      },
+                    }));
+                    setNotice('已保存你的表达偏好');
+                  }}
+                >
+                  保存表达偏好
+                </button>
+              </div>
+              {styles[active].samples.length > 0 && (
+                <details className="style-samples">
+                  <summary>查看和整理口吻样本</summary>
+                  {[...styles[active].samples].reverse().map((sample) => (
+                    <div className="style-sample" key={sample.id}>
+                      <div>
+                        <span>
+                          {sample.source === 'correction'
+                            ? '你修改的表达'
+                            : '本人消息'}
+                        </span>
+                        <p>{sample.text}</p>
+                      </div>
+                      <button
+                        aria-label={'删除口吻样本：' + sample.text.slice(0, 16)}
+                        onClick={() => {
+                          cancelReception();
+                          setStyles((all) => ({
+                            ...all,
+                            [active]: {
+                              ...all[active],
+                              samples: all[active].samples.filter(
+                                (s) => s.id !== sample.id,
+                              ),
+                            },
+                          }));
+                        }}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </details>
+              )}
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={correction !== null}
+        onOpenChange={(open) => {
+          if (!open) setCorrection(null);
+        }}
+      >
+        <DialogContent className="our-dialog style-panel">
+          <DialogTitle>换成你会说的话</DialogTitle>
+          <DialogDescription>
+            你的修改会优先用于之后的口吻学习，不会修改或重新发送已经发出的消息。
+          </DialogDescription>
+          <blockquote className="style-original">{correction?.text}</blockquote>
+          <label htmlFor="style-correction">你会怎么表达？</label>
+          <textarea
+            id="style-correction"
+            rows={4}
+            maxLength={500}
+            value={correctionText}
+            onChange={(e) => setCorrectionText(e.target.value)}
+            placeholder="写下你自己的表达方式…"
+          />
+          <button
+            className="primary-button"
+            disabled={!correctionText.trim()}
+            onClick={() => {
+              if (
+                !correction ||
+                (correction.assistantFor ?? correction.recipient) !== active
+              )
+                return;
+              cancelReception();
+              setStyles((all) => ({
+                ...all,
+                [active]: correctStyle(
+                  all[active],
+                  correction.id,
+                  correctionText,
+                ),
+              }));
+              setCorrection(null);
+              setNotice(
+                styles[active].enabled
+                  ? '已记住你的表达，下次接待会参考'
+                  : '已保存表达，开启口吻学习后会使用',
+              );
+            }}
+          >
+            记住这个表达
+          </button>
         </DialogContent>
       </Dialog>
       <Dialog
@@ -1297,6 +1908,42 @@ export default function Home() {
               rows={4}
             />
           </label>
+          <div className="attachment-editor">
+            <span className="field-label">照片或文件</span>
+            <label className="attachment-picker" htmlFor="memory-attachments">
+              <Paperclip size={17} />
+              <span>
+                添加附件
+                <small>最多 6 个，单个不超过 100 MB</small>
+              </span>
+              <input
+                id="memory-attachments"
+                type="file"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.zip,.rar,.7z"
+                onChange={(event) => {
+                  addAttachments(event.target.files);
+                  event.target.value = '';
+                }}
+              />
+            </label>
+            {!!draftAttachments.length && (
+              <div className="draft-attachments">
+                {draftAttachments.map((attachment) => (
+                  <AttachmentView
+                    attachment={attachment}
+                    file={attachment.file}
+                    key={attachment.id}
+                    onRemove={() =>
+                      setDraftAttachments((current) =>
+                        current.filter((item) => item.id !== attachment.id),
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </div>
           <label>
             聊到哪些词时想起它
             <input
@@ -1313,10 +1960,10 @@ export default function Home() {
           </p>
           <button
             className="primary-button"
-            disabled={!title.trim() || !draft.trim()}
+            disabled={!title.trim() || !draft.trim() || savingMemory}
             onClick={save}
           >
-            保存记忆
+            {savingMemory ? '正在保存…' : '保存记忆'}
           </button>
         </DialogContent>
       </Dialog>
@@ -1391,6 +2038,94 @@ export default function Home() {
         </div>
       )}
     </SidebarProvider>
+  );
+}
+function AttachmentView({
+  attachment,
+  file,
+  onRemove,
+}: {
+  attachment: MemoryAttachment;
+  file?: File;
+  onRemove?: () => void;
+}) {
+  const [url, setUrl] = useState('');
+  const [missing, setMissing] = useState(false);
+  useEffect(() => {
+    let active = true;
+    let objectUrl = '';
+    async function load() {
+      try {
+        const blob = file ?? (await readAttachmentBlob(attachment.id));
+        if (!blob) {
+          if (active) setMissing(true);
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        if (active) {
+          setUrl(objectUrl);
+          setMissing(false);
+        } else {
+          URL.revokeObjectURL(objectUrl);
+        }
+      } catch {
+        if (active) setMissing(true);
+      }
+    }
+    load();
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachment.id, file]);
+  const icon =
+    attachment.kind === 'image' ? (
+      <ImageIcon size={18} />
+    ) : (
+      <FileText size={18} />
+    );
+  return (
+    <div className={'memory-attachment ' + attachment.kind}>
+      {attachment.kind === 'image' && url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`打开${attachment.name}`}
+        >
+          <img src={url} alt={attachment.name} />
+        </a>
+      ) : (
+        <a
+          className={missing ? 'attachment-file missing' : 'attachment-file'}
+          href={url || undefined}
+          download={url ? attachment.name : undefined}
+          aria-disabled={!url}
+        >
+          {icon}
+        </a>
+      )}
+      <div className="attachment-details">
+        <strong title={attachment.name}>{attachment.name}</strong>
+        <small>
+          {attachment.kind === 'video'
+            ? '已停止支持视频上传'
+            : missing
+              ? '文件仅在原设备可用'
+              : formatFileSize(attachment.size)}
+        </small>
+      </div>
+      {onRemove && (
+        <button
+          type="button"
+          className="attachment-remove"
+          aria-label={`移除${attachment.name}`}
+          onClick={onRemove}
+        >
+          <X size={15} />
+        </button>
+      )}
+    </div>
   );
 }
 function formatTime(timestamp: number) {

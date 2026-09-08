@@ -15,6 +15,14 @@ export type Memory = {
     originalText: string;
   }[];
   tags: string[];
+  attachments?: MemoryAttachment[];
+};
+export type MemoryAttachment = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  kind: 'image' | 'video' | 'file';
 };
 export type Message = {
   id: string;
@@ -28,6 +36,7 @@ export type Message = {
   sentAt?: number;
   replyToId?: string;
   unresolved?: UnansweredPart[];
+  replyMode?: 'model' | 'local' | 'fallback';
 };
 export type UnansweredPart = {
   text: string;
@@ -147,7 +156,10 @@ export function reviewMemory(
 }
 export function reviseMemory(
   m: Memory,
-  updates: Pick<Memory, 'title' | 'text' | 'subject' | 'shared' | 'tags'>,
+  updates: Pick<
+    Memory,
+    'title' | 'text' | 'subject' | 'shared' | 'tags' | 'attachments'
+  >,
 ): Memory {
   const confirmed = updates.subject === m.owner;
   return {
