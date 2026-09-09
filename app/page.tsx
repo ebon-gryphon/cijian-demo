@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import {
   ArrowUp,
@@ -17,7 +17,6 @@ import {
   ChevronRight,
   Plus,
   Pencil,
-  Quote,
   ArrowLeftRight,
   ChevronDown,
   LogIn,
@@ -41,6 +40,9 @@ import {
   SidebarMenuButton,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
+import { GuessGameCard } from './guess-game-card';
+import { SpaceCover } from './space-cover';
+import { MemoryFragments } from './memory-fragments';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import {
@@ -129,6 +131,20 @@ import {
 type DraftAttachment = MemoryAttachment & { file?: File };
 
 export default function Home() {
+  const [entered, setEntered] = useState(false);
+  const arrival = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (entered) {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      arrival.current?.focus({ preventScroll: true });
+    }
+  }, [entered]);
+  return entered
+    ? <div className="space-arrival" ref={arrival} tabIndex={-1} aria-label="我们的空间"><OurSpace onExit={() => setEntered(false)} /></div>
+    : <SpaceCover onEnter={() => setEntered(true)} />;
+}
+
+function OurSpace({ onExit }: { onExit: () => void }) {
   const [view, setView] = useState('chat'),
     [active, setActive] = useState<Person>('许知夏');
   const partner: Person = active === '许知夏' ? '林屿' : '许知夏';
@@ -143,7 +159,9 @@ export default function Home() {
     [notice, setNotice] = useState(''),
     [loaded, setLoaded] = useState(false),
     [sourceIds, setSourceIds] = useState<string[] | null>(null);
-  const end = useRef<HTMLDivElement>(null);
+  const chatLog = useRef<HTMLDivElement>(null);
+  const chatPositioned = useRef(false);
+  const chatIdentity = useRef<Person | null>(null);
   const [now, setNow] = useState(0);
   const [loginOpen, setLoginOpen] = useState(false);
   const [modelSettings, setModelSettings] = useState<
@@ -366,10 +384,22 @@ export default function Home() {
     );
     return () => clearTimeout(timer);
   }, [presence, now]);
-  useEffect(() => {
-    if (view !== 'chat') return;
-    end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [messages, view]);
+  useLayoutEffect(() => {
+    if (view !== 'chat' || !loaded) {
+      chatPositioned.current = false;
+      return;
+    }
+    const log = chatLog.current;
+    if (!log) return;
+    if (!chatPositioned.current || chatIdentity.current !== active) {
+      // Position restored history before paint, without scrolling the page.
+      log.scrollTop = log.scrollHeight;
+    } else {
+      log.scrollTo({ top: log.scrollHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    }
+    chatPositioned.current = true;
+    chatIdentity.current = active;
+  }, [messages, view, loaded, active, generating]);
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(''), 3500);
@@ -715,7 +745,22 @@ export default function Home() {
   function memoryCard(m: Memory) {
     return (
       <article className="memory-card" key={m.id}>
-        <div className="row-between">
+        <h3>{m.title}</h3>
+        <p>{m.text}</p>
+        {!!m.attachments?.length && (
+          <div className="memory-attachments">
+            {m.attachments.map((attachment) => (
+              <AttachmentView attachment={attachment} key={attachment.id} />
+            ))}
+          </div>
+        )}
+        <div className="memory-meta">
+          <Avatar person={m.owner} mini />
+          <span>
+            {m.owner}讲述 · 关于{m.subject}
+          </span>
+        </div>
+        <div className="row-between memory-status-row">
           <span className={'pill ' + (m.confirmed ? 'confirmed' : 'warm')}>
             {m.confirmed ? (
               <>
@@ -741,21 +786,6 @@ export default function Home() {
               <Pencil size={15} />
             </button>
           )}
-        </div>
-        <h3>{m.title}</h3>
-        <p>{m.text}</p>
-        {!!m.attachments?.length && (
-          <div className="memory-attachments">
-            {m.attachments.map((attachment) => (
-              <AttachmentView attachment={attachment} key={attachment.id} />
-            ))}
-          </div>
-        )}
-        <div className="memory-meta">
-          <Avatar person={m.owner} mini />
-          <span>
-            {m.owner}讲述 · 关于{m.subject}
-          </span>
         </div>
         {!!m.reviews?.length && (
           <details className="review-history">
@@ -812,7 +842,7 @@ export default function Home() {
   };
   return (
     <SidebarProvider
-      style={{ '--sidebar-width': '238px' } as React.CSSProperties}
+      style={{ '--sidebar-width': '208px' } as React.CSSProperties}
     >
       <Sidebar className="app-sidebar">
         <SidebarHeader>
@@ -872,10 +902,16 @@ export default function Home() {
               <DropdownMenuItem onClick={openOnboarding}>
                 <BookHeart size={16} /> 使用引导
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={onExit}>
+                <Heart size={16} /> 返回封面
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarFooter>
       </Sidebar>
+      <nav className="mobile-bottom-nav" aria-label="页面导航">
+        {nav.map(n => <button key={n.id} aria-current={view === n.id ? 'page' : undefined} onClick={() => setView(n.id)}><n.icon size={20} /><span>{n.name}</span>{n.id === 'handoff' && pending.length > 0 && <i aria-label={pending.length + '条待回应'} />}</button>)}
+      </nav>
       <main className="workspace">
         <header className="topbar">
           <div className="breadcrumb">
@@ -889,27 +925,27 @@ export default function Home() {
             交互 Demo
           </div>
         </header>
-        <div className="content">
+        <div className={"content view-" + view}>
           <div className="page-heading">
             <div>
-              <p className="eyebrow">OUR LITTLE WORLD</p>
+              <p className="eyebrow">{view === 'chat' ? 'JUST YOU & ME' : view === 'memories' ? 'OUR SHARED PAGES' : view === 'perspectives' ? 'THROUGH YOUR EYES' : 'WHEN YOU RETURN'}</p>
               <h1>
                 {view === 'chat'
-                  ? '隔着距离，也接得住日常。'
+                  ? '今天，也想和你说说话。'
                   : view === 'perspectives'
-                    ? '在彼此眼里，认识我们。'
+                    ? '你眼里的我，我眼里的你。'
                     : view === 'memories'
-                      ? '把小事，慢慢记成我们。'
-                      : '先回应，最需要你的话。'}
+                      ? '我们一起，记得的小事。'
+                      : '这几句话，等你亲自回应。'}
               </h1>
               <p>
                 {view === 'chat'
-                  ? '你可以先说，等有空的人回来接着听。'
+                  ? '有空时聊聊，忙碌时也可以留句话。'
                   : view === 'perspectives'
                     ? '我的感受、你的理解，都值得有自己的位置。'
                     : view === 'memories'
                       ? '每一段记忆，都保留讲述它的人。'
-                      : 'AI 未能回答的部分，已经为你整理在这里。'}
+                      : '小助手没能回答的部分，留在这里等你。'}
               </p>
             </div>
             <button
@@ -973,7 +1009,7 @@ export default function Home() {
                   <span />
                   <Heart size={15} />
                   <span />
-                  <small>相隔 164 公里，分享同一刻</small>
+                  <small>上海 · 杭州 / 示例中的两座城</small>
                 </div>
                 <div className="person-status">
                   <Avatar person={partner} large />
@@ -998,7 +1034,7 @@ export default function Home() {
                       <MessageCircle size={19} />
                     </span>
                     <div className="chat-heading">
-                      <h2>留给彼此的话</h2>
+                      <h2>{partner}<span className="conversation-label"> / 留给彼此的话</span></h2>
                       <p>
                         {busy[partner]
                           ? reception[partner]
@@ -1028,6 +1064,9 @@ export default function Home() {
                   </div>
                   <div
                     className="chat-messages"
+                    ref={chatLog}
+                    data-ready={loaded}
+                    aria-busy={!loaded}
                     role="log"
                     aria-label="对话记录"
                     aria-live="polite"
@@ -1103,7 +1142,6 @@ export default function Home() {
                         {generating}的 AI 助手正在整理回复…
                       </p>
                     )}
-                    <div ref={end} />
                   </div>
                   <div className="composer">
                     <div className="suggestions">
@@ -1158,23 +1196,12 @@ export default function Home() {
                   </div>
                 </section>
                 <aside className="context-column">
-                  <section className="remember-card">
-                    <p className="eyebrow">A SHARED MEMORY</p>
-                    <Quote size={22} />
-                    <h3>
-                      下雨天，
-                      <br />
-                      会想起那碗热汤面。
-                    </h3>
-                    <p>第一次杭州见面 · 共同回忆</p>
-                    <button
-                      className="text-button"
-                      onClick={() => setSourceIds(['noodle'])}
-                    >
-                      打开这段记忆
-                      <ArrowUpRight size={15} />
-                    </button>
-                  </section>
+                  <MemoryFragments
+                    key={active}
+                    memories={visibleMemories}
+                    person={active}
+                    onOpen={setSourceIds}
+                  />
                   <div className="gentle-note">
                     <Heart size={15} />
                     <p>
@@ -1189,6 +1216,16 @@ export default function Home() {
           )}
           {view === 'perspectives' && (
             <>
+              <GuessGameCard
+                person={active}
+                onSwitch={switchPerson}
+                onChat={(text) => { setView('chat'); setInput(text); }}
+                onRemember={(title, text) => edit({
+                  id: 'new', title, text, owner: active, subject: '我们',
+                  shared: true, confirmed: false, tags: ['猜你会怎么选'],
+                })}
+              />
+              <div className="perspective-archive-heading"><p className="eyebrow">OUR GROWING PORTRAIT</p><h2>慢慢认识的我们</h2><p>你说的自己，我眼里的你，都留在这里。</p></div>
               <div className="section-toolbar">
                 <span>
                   <Layers size={17} />
@@ -1365,7 +1402,7 @@ export default function Home() {
                 <div>
                   <h2>
                     {pending.length
-                      ? pending.length + ' 条消息需要你补充'
+                      ? pending.length + ' 条留言，等你接着聊'
                       : '暂时没有 AI 未答的问题'}
                   </h2>
                   <p>关系与感受优先展示，AI 已答清楚的内容不再列入。</p>
