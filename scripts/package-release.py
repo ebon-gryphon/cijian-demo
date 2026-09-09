@@ -18,7 +18,7 @@ def main():
     archive = output / "cijian-demo.zip"
     with ZipFile(archive, "w", compression=ZIP_DEFLATED, compresslevel=9) as bundle:
         for name, data in [("index.html", html), ("README.txt", guide)]:
-            info = ZipInfo("cijian-demo/" + name, date_time=(2026, 9, 7, 0, 0, 0))
+            info = ZipInfo("cijian-demo/" + name, date_time=(2026, 9, 9, 0, 0, 0))
             info.compress_type = ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
             info.create_system = 3
