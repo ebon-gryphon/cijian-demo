@@ -59,6 +59,7 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { memoryPhotoUrls } from './memory-photos';
 import {
   Dialog,
   DialogContent,
@@ -68,6 +69,7 @@ import {
 import {
   people,
   initialMemories,
+  addDemoMemoryPhotos,
   initialMessages,
   uid,
   memoryStatus,
@@ -275,7 +277,7 @@ function OurSpace({ onExit }: { onExit: () => void }) {
       if (raw) {
         const s = JSON.parse(raw);
         if (Array.isArray(s.memories) && Array.isArray(s.messages)) {
-          setMemories(s.memories);
+          setMemories(addDemoMemoryPhotos(s.memories, s.memoryPhotoEdition));
           setMessages(migrateReplyLinks(s.messages));
           setPresence(restorePresence(s.presence, s.busy));
           setReception({
@@ -309,6 +311,7 @@ function OurSpace({ onExit }: { onExit: () => void }) {
           'between-us-demo-v1',
           JSON.stringify({
             memories,
+            memoryPhotoEdition: 1,
             messages,
             presence,
             reception,
@@ -745,8 +748,6 @@ function OurSpace({ onExit }: { onExit: () => void }) {
   function memoryCard(m: Memory) {
     return (
       <article className="memory-card" key={m.id}>
-        <h3>{m.title}</h3>
-        <p>{m.text}</p>
         {!!m.attachments?.length && (
           <div className="memory-attachments">
             {m.attachments.map((attachment) => (
@@ -754,6 +755,8 @@ function OurSpace({ onExit }: { onExit: () => void }) {
             ))}
           </div>
         )}
+        <h3>{m.title}</h3>
+        <p>{m.text}</p>
         <div className="memory-meta">
           <Avatar person={m.owner} mini />
           <span>
@@ -1358,6 +1361,7 @@ function OurSpace({ onExit }: { onExit: () => void }) {
                               (f === 'shared' && m.shared) ||
                               (m.shared && f === memoryStatus(m)),
                           )
+                          .sort((a, b) => Number(!!b.attachments?.some((x) => x.kind === 'image')) - Number(!!a.attachments?.some((x) => x.kind === 'image')))
                           .map(memoryCard)}
                       </div>
                       {!visibleMemories.some(
@@ -2288,10 +2292,18 @@ function AttachmentView({
 }) {
   const [url, setUrl] = useState('');
   const [missing, setMissing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const builtInUrl = memoryPhotoUrls[attachment.id];
   useEffect(() => {
     let active = true;
     let objectUrl = '';
     async function load() {
+      setMissing(false);
+      setUrl('');
+      if (!file && builtInUrl) {
+        setUrl(builtInUrl);
+        return;
+      }
       try {
         const blob = file ?? (await readAttachmentBlob(attachment.id));
         if (!blob) {
@@ -2314,7 +2326,7 @@ function AttachmentView({
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [attachment.id, file]);
+  }, [attachment.id, file, builtInUrl]);
   const icon =
     attachment.kind === 'image' ? (
       <ImageIcon size={18} />
@@ -2324,14 +2336,18 @@ function AttachmentView({
   return (
     <div className={'memory-attachment ' + attachment.kind}>
       {attachment.kind === 'image' && url ? (
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`打开${attachment.name}`}
-        >
-          <img src={url} alt={attachment.name} />
-        </a>
+        <>
+          <button type="button" className="memory-photo-open" onClick={() => setExpanded(true)} aria-label={`放大查看${attachment.name}`}>
+            <img src={url} alt={attachment.name} loading="lazy" width={1536} height={1024} />
+          </button>
+          <Dialog open={expanded} onOpenChange={setExpanded}>
+            <DialogContent className="our-dialog memory-photo-dialog">
+              <DialogTitle>{attachment.name}</DialogTitle>
+              <DialogDescription>{builtInUrl ? '此间示例回忆 · AI 生成配图' : '一起留下的照片'}</DialogDescription>
+              <img src={url} alt={attachment.name} />
+            </DialogContent>
+          </Dialog>
+        </>
       ) : (
         <a
           className={missing ? 'attachment-file missing' : 'attachment-file'}
@@ -2345,7 +2361,7 @@ function AttachmentView({
       <div className="attachment-details">
         <strong title={attachment.name}>{attachment.name}</strong>
         <small>
-          {attachment.kind === 'video'
+          {builtInUrl ? '示例回忆 · AI 配图' : attachment.kind === 'video'
             ? '已停止支持视频上传'
             : missing
               ? '文件仅在原设备可用'

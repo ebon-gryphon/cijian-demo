@@ -235,6 +235,7 @@ export const initialMemories: Memory[] = [
     shared: true,
     confirmed: true,
     tags: ['雨', '面', '第一次', '回忆'],
+    attachments: [{ id: 'demo-photo-noodles', name: '雨天街角的热汤面', type: 'image/jpeg', size: 252642, kind: 'image' }],
   },
   {
     id: 'view',
@@ -246,7 +247,43 @@ export const initialMemories: Memory[] = [
     confirmed: false,
     tags: ['细心', '记住'],
   },
+  {
+    id: 'demo-lake-evening',
+    title: '把黄昏多留一会儿',
+    text: '那次在西湖边，我们沿着柳树走了很久。你说再走五分钟，结果一起等到了日落。',
+    owner: '许知夏',
+    subject: '我们',
+    shared: true,
+    confirmed: true,
+    tags: ['西湖', '散步', '日落', '回忆'],
+    attachments: [{ id: 'demo-photo-lake', name: '西湖边的黄昏', type: 'image/jpeg', size: 213570, kind: 'image' }],
+  },
+  {
+    id: 'demo-weekend-breakfast',
+    title: '不用赶时间的早晨',
+    text: '吐司烤得有一点焦，咖啡刚刚好。我们把手机放在一旁，慢慢吃完了两个人的早餐。',
+    owner: '林屿',
+    subject: '我们',
+    shared: true,
+    confirmed: true,
+    tags: ['早餐', '咖啡', '吐司'],
+    attachments: [{ id: 'demo-photo-breakfast', name: '两个人的周末早餐', type: 'image/jpeg', size: 203453, kind: 'image' }],
+  },
 ];
+// Apply once to the original demo, without replacing edits or restoring deletions.
+export function addDemoMemoryPhotos(memories: Memory[], edition?: number): Memory[] {
+  if (edition === 1 || !memories.some((m) => ['time', 'care', 'noodle', 'weekend'].includes(m.id))) return memories;
+  const noodle = initialMemories.find((m) => m.id === 'noodle')!;
+  const upgraded = memories.map((m) =>
+    m.id === noodle.id && m.text === noodle.text && !m.attachments?.length
+      ? { ...m, attachments: noodle.attachments }
+      : m,
+  );
+  return [
+    ...upgraded,
+    ...initialMemories.filter((m) => m.id.startsWith('demo-') && !upgraded.some((old) => old.id === m.id)),
+  ];
+}
 export const initialMessages: Message[] = [
   {
     id: 'hello',

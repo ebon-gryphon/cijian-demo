@@ -8,7 +8,11 @@ const assets=path.join(root,'dist/client/_next/static/css');
 const cssFiles=(await readdir(assets)).filter(f=>f.endsWith('.css'));
 if(!cssFiles.length)throw new Error('Build the application before producing the offline demo.');
 const css=(await Promise.all(cssFiles.map(f=>readFile(path.join(assets,f),'utf8')))).join('\n');
-const js=outputFiles[0].text.replace(/<\/script/gi,'<\\/script');
+let js=outputFiles[0].text.replace(/<\/script/gi,'<\\/script');
+for (const filename of ['rainy-noodles.jpg', 'west-lake.jpg', 'weekend-breakfast.jpg']) {
+  const bytes = await readFile(path.join(root, 'public/memories', filename));
+  js = js.replaceAll('/memories/' + filename, 'data:image/jpeg;base64,' + bytes.toString('base64'));
+}
 const html='<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>此间 · 我们的关系空间</title><meta name="description" content="双人认知与关系陪伴的本机交互 Demo"><style>'+css+'</style></head><body><div id="root"></div><script>'+js+'</script></body></html>';
 await writeFile(path.join(root,'打开此间.html'),html,'utf8');
 console.log('Offline demo generated: 打开此间.html');
