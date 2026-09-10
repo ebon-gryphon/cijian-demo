@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>此间 · 我们的关系空间</title>
+<meta name="description" content="双人认知与关系陪伴空间">
+<link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap">
+<style>
+/* ===== 全局重置与变量 ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f7f3ed;
+  --bg-soft:#f0ebe2;
+  --card:#ffffff;
+  --primary:#9a6b5a;
+  --primary-hover:#855a4b;
+  --primary-light:#e8d8cf;
+  --accent:#d4956a;
+  --accent-light:#f0d9c5;
+  --text:#4a3f35;
+  --text-soft:#8b7d6b;
+  --text-faint:#b5a99a;
+  --border:#e5ddd2;
+  --error:#c45c5c;
+  --success:#6b9a6b;
+  --radius:16px;
+  --shadow:0 4px 16px rgba(74,63,53,.06),0 8px 32px rgba(74,63,53,.08);
+  --shadow-hover:0 8px 24px rgba(74,63,53,.1),0 16px 48px rgba(74,63,53,.12);
+  --shadow-lg:0 16px 48px rgba(74,63,53,.12),0 32px 64px rgba(74,63,53,.1);
+}
+html,body{height:100%}
+body{
+  font-family:'Noto Sans SC',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(212,149,106,.1) 0%, transparent 45%),
+    radial-gradient(ellipse at 80% 90%, rgba(154,107,90,.08) 0%, transparent 50%),
+    linear-gradient(135deg,#faf6f0 0%,#f7f3ed 25%,#f2ece3 60%,#ede4d8 100%);
+  color:var(--text);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+input{font-family:inherit}
+a{color:var(--primary);text-decoration:none}
+
+/* ===== 页面布局 ===== */
+.page{
+  min-height:100vh;
+  display:flex;
+  align-items:stretch;
+}
+/* 左栏：品牌展示 */
+.brand-panel{
+  flex:1.1;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  padding:60px 48px;
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(160deg,#f7f3ed 0%,#f0e8dc 50%,#ebe0d2 100%);
+}
+.brand-panel::before{
+  content:'';
+  position:absolute;
+  top:-120px;right:-120px;
+  width:400px;height:400px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(154,107,90,.08) 0%,transparent 70%);
+}
+.brand-panel::after{
+  content:'';
+  position:absolute;
+  bottom:-80px;left:-80px;
+  width:300px;height:300px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(154,107,90,.06) 0%,transparent 70%);
+}
+.brand-inner{
+  position:relative;
+  z-index:1;
+  text-align:center;
+  max-width:440px;
+}
+.brand-eyebrow{
+  font-size:12px;
+  letter-spacing:.35em;
+  color:var(--text-soft);
+  text-transform:uppercase;
+  margin-bottom:24px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
+}
+.brand-eyebrow::before,.brand-eyebrow::after{
+  content:'';
+  width:36px;height:1px;
+  background:var(--text-faint);
+}
+.brand-title{
+  font-family:'Noto Serif SC',serif;
+  font-size:clamp(72px,10vw,120px);
+  font-weight:700;
+  color:var(--primary);
+  letter-spacing:.15em;
+  line-height:1.1;
+  margin-bottom:8px;
+}
+.brand-title .dot{
+  display:inline-block;
+  font-size:.5em;
+  vertical-align:super;
+  margin-left:4px;
+}
+.brand-subtitle{
+  font-family:'Noto Serif SC',serif;
+  font-size:18px;
+  color:var(--text-soft);
+  letter-spacing:.1em;
+  margin-bottom:40px;
+  display:flex;
+  align-items:center;
+  gap:16px;
+}
+.brand-subtitle::before{
+  content:'';
+  width:48px;
+  height:2px;
+  background:linear-gradient(90deg,var(--primary),var(--accent));
+  border-radius:2px;
+}
+.brand-subtitle::after{
+  content:'';
+  flex:1;
+  height:1px;
+  background:linear-gradient(90deg,var(--border),transparent);
+}
+.brand-tagline{
+  font-size:14px;
+  color:var(--text-faint);
+  letter-spacing:.08em;
+  line-height:2;
+}
+.brand-tagline p{margin-bottom:4px}
+.brand-divider{
+  width:1px;height:48px;
+  background:linear-gradient(to bottom,transparent,var(--text-faint),transparent);
+  margin:32px auto;
+}
+
+/* 右栏：表单 */
+.form-panel{
+  flex:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:48px 32px;
+  background:var(--bg);
+}
+.form-card{
+  width:100%;
+  max-width:420px;
+  background:var(--card);
+  border-radius:var(--radius);
+  box-shadow:0 12px 40px rgba(74,63,53,.12),0 4px 16px rgba(74,63,53,.08);
+  padding:40px 36px;
+  border:1px solid rgba(229,221,210,.6);
+}
+.form-header{
+  text-align:center;
+  margin-bottom:32px;
+}
+.form-header h2{
+  font-family:'Noto Serif SC',serif;
+  font-size:26px;
+  font-weight:600;
+  color:var(--text);
+  margin-bottom:6px;
+}
+.form-header p{
+  font-size:13px;
+  color:var(--text-soft);
+}
+
+/* Tab 切换 */
+.tabs{
+  display:flex;
+  background:var(--bg-soft);
+  border-radius:10px;
+  padding:4px;
+  margin-bottom:28px;
+}
+.tab-btn{
+  flex:1;
+  padding:10px 0;
+  font-size:14px;
+  font-weight:500;
+  color:var(--text-soft);
+  border-radius:8px;
+  transition:all .25s ease;
+}
+.tab-btn.active{
+  background:var(--card);
+  color:var(--primary);
+  box-shadow:0 2px 8px rgba(74,63,53,.08);
+}
+
+/* 表单字段 */
+.field{
+  margin-bottom:18px;
+}
+.field label{
+  display:block;
+  font-size:13px;
+  font-weight:500;
+  color:var(--text);
+  margin-bottom:7px;
+}
+.field label .optional{
+  font-weight:400;
+  color:var(--text-faint);
+  font-size:12px;
+  margin-left:4px;
+}
+.input-wrap{
+  position:relative;
+}
+.input-wrap input{
+  width:100%;
+  padding:12px 14px;
+  font-size:14px;
+  color:var(--text);
+  background:var(--bg);
+  border:1.5px solid var(--border);
+  border-radius:10px;
+  outline:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+.input-wrap input:focus{
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(154,107,90,.1);
+  background:var(--card);
+}
+.input-wrap input.error{
+  border-color:var(--error);
+}
+.input-wrap .toggle-pw{
+  position:absolute;
+  right:12px;top:50%;
+  transform:translateY(-50%);
+  color:var(--text-faint);
+  padding:4px;
+  font-size:12px;
+}
+.field-hint{
+  font-size:12px;
+  color:var(--text-faint);
+  margin-top:5px;
+}
+.field-error{
+  font-size:12px;
+  color:var(--error);
+  margin-top:5px;
+  display:none;
+}
+.field-error.show{display:block}
+
+/* 密码强度 */
+.pw-strength{
+  display:flex;
+  gap:4px;
+  margin-top:8px;
+}
+.pw-bar{
+  flex:1;
+  height:4px;
+  border-radius:2px;
+  background:var(--border);
+  transition:background .3s;
+}
+.pw-bar.weak{background:var(--error)}
+.pw-bar.medium{background:#d4a843}
+.pw-bar.strong{background:var(--success)}
+.pw-label{
+  font-size:11px;
+  color:var(--text-faint);
+  margin-top:4px;
+}
+
+/* 提交按钮 */
+.submit-btn{
+  width:100%;
+  padding:13px;
+  font-size:15px;
+  font-weight:500;
+  color:#fff;
+  background:linear-gradient(135deg,var(--primary) 0%,#a87868 100%);
+  border-radius:10px;
+  margin-top:8px;
+  transition:all .25s cubic-bezier(.4,0,.2,1);
+  letter-spacing:.05em;
+  box-shadow:0 2px 8px rgba(154,107,90,.2);
+}
+.submit-btn:hover{
+  background:linear-gradient(135deg,var(--primary-hover) 0%,var(--primary) 100%);
+  transform:translateY(-1px);
+  box-shadow:0 4px 16px rgba(154,107,90,.3);
+}
+.submit-btn:active{transform:translateY(0) scale(.98)}
+.submit-btn:disabled{
+  background:var(--text-faint);
+  cursor:not-allowed;
+  box-shadow:none;
+  transform:none;
+}
+
+/* 底部链接 */
+.form-footer{
+  text-align:center;
+  margin-top:20px;
+  font-size:13px;
+  color:var(--text-soft);
+}
+.form-footer a{
+  color:var(--primary);
+  font-weight:500;
+}
+
+/* 全局提示 */
+.toast{
+  position:fixed;
+  top:24px;left:50%;
+  transform:translateX(-50%) translateY(-20px);
+  background:var(--text);
+  color:#fff;
+  padding:12px 24px;
+  border-radius:10px;
+  font-size:14px;
+  opacity:0;
+  transition:all .3s ease;
+  z-index:999;
+  pointer-events:none;
+  max-width:90vw;
+}
+.toast.show{
+  opacity:1;
+  transform:translateX(-50%) translateY(0);
+}
+.toast.error{background:var(--error)}
+.toast.success{background:var(--success)}
+
+/* 响应式 */
+@media(max-width:860px){
+  .page{flex-direction:column}
+  .brand-panel{
+    flex:none;
+    padding:48px 24px 32px;
+    min-height:auto;
+  }
+  .brand-title{font-size:64px}
+  .brand-divider{display:none}
+  .brand-tagline{display:none}
+  .form-panel{padding:0 20px 40px}
+  .form-card{padding:32px 24px}
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <!-- ===== 左栏：品牌展示 ===== -->
+  <div class="brand-panel">
+    <div class="brand-inner">
+      <div class="brand-eyebrow">BETWEEN US</div>
+      <h1 class="brand-title">此间<span class="dot">。</span></h1>
+      <p class="brand-subtitle">隔着距离，也分享日常。</p>
+      <div class="brand-divider"></div>
+      <div class="brand-tagline">
+        <p>有话慢慢说，有你认真听。</p>
+        <p>把日常，写成我们。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 右栏：登录/注册表单 ===== -->
+  <div class="form-panel">
+    <div class="form-card">
+      <div class="form-header">
+        <h2 id="formTitle">欢迎回来</h2>
+        <p id="formDesc">登录后进入你们的空间</p>
+      </div>
+
+      <!-- Tab 切换 -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="login">登录</button>
+        <button class="tab-btn" data-tab="register">注册</button>
+      </div>
+
+      <!-- 登录表单 -->
+      <form id="loginForm" novalidate>
+        <div class="field">
+          <label for="loginUsername">用户名</label>
+          <div class="input-wrap">
+            <input type="text" id="loginUsername" placeholder="请输入用户名" autocomplete="username">
+          </div>
+          <div class="field-error" id="loginUsernameErr"></div>
+        </div>
+        <div class="field">
+          <label for="loginPassword">密码</label>
+          <div class="input-wrap">
+            <input type="password" id="loginPassword" placeholder="请输入密码" autocomplete="current-password">
+            <button type="button" class="toggle-pw" data-target="loginPassword">显示</button>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+            <div class="field-error" id="loginPasswordErr" style="margin-top:0"></div>
+            <a href="#" id="forgotPwLink" style="font-size:12px;color:var(--text-faint)">忘记密码？</a>
+          </div>
+        </div>
+        <button type="submit" class="submit-btn" id="loginSubmit">登录</button>
+        <div class="form-footer">
+          还没有账号？<a href="#" id="goRegister">立即注册</a>
+        </div>
+        <div style="text-align:center;margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)">
+          <button type="button" id="demoLoginBtn" style="font-size:12px;color:var(--text-soft);background:none;border:none;cursor:pointer;text-decoration:underline">使用演示账号快速体验</button>
+        </div>
+      </form>
+
+      <!-- 注册表单 -->
+      <form id="registerForm" novalidate style="display:none">
+        <div class="field">
+          <label for="regUsername">用户名</label>
+          <div class="input-wrap">
+            <input type="text" id="regUsername" placeholder="2-20 个字符" autocomplete="username">
+          </div>
+          <div class="field-error" id="regUsernameErr"></div>
+        </div>
+        <div class="field">
+          <label for="regPassword">密码</label>
+          <div class="input-wrap">
+            <input type="password" id="regPassword" placeholder="至少 8 位，含大小写字母和数字" autocomplete="new-password">
+            <button type="button" class="toggle-pw" data-target="regPassword">显示</button>
+          </div>
+          <div class="pw-strength" id="pwStrength">
+            <div class="pw-bar"></div>
+            <div class="pw-bar"></div>
+            <div class="pw-bar"></div>
+            <div class="pw-bar"></div>
+          </div>
+          <div class="pw-label" id="pwLabel">密码需至少 8 位，包含大写字母、小写字母和数字</div>
+          <div class="field-error" id="regPasswordErr"></div>
+        </div>
+        <div class="field">
+          <label for="regConfirm">确认密码</label>
+          <div class="input-wrap">
+            <input type="password" id="regConfirm" placeholder="再次输入密码" autocomplete="new-password">
+          </div>
+          <div class="field-error" id="regConfirmErr"></div>
+        </div>
+        <div class="field">
+          <label for="regInvite">邀请码<span class="optional">选填</span></label>
+          <div class="input-wrap">
+            <input type="text" id="regInvite" placeholder="填写对方的邀请码可直接绑定">
+          </div>
+          <div class="field-hint">没有邀请码也可以注册，登录后再创建或填写</div>
+          <div class="field-error" id="regInviteErr"></div>
+        </div>
+        <div class="field">
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;color:var(--text-soft);line-height:1.6">
+            <input type="checkbox" id="agreeTerms" style="margin-top:2px;accent-color:var(--primary)">
+            <span>我已阅读并同意<a href="#" id="termsLink" style="color:var(--primary)">《用户协议》</a>和<a href="#" id="privacyLink" style="color:var(--primary)">《隐私政策》</a></span>
+          </label>
+          <div class="field-error" id="agreeTermsErr" style="display:none;font-size:12px;color:var(--error);margin-top:5px">请先阅读并同意用户协议和隐私政策</div>
+        </div>
+        <button type="submit" class="submit-btn" id="registerSubmit">注册并进入</button>
+        <div class="form-footer">
+          已有账号？<a href="#" id="goLogin">直接登录</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- 全局提示 -->
+<div class="toast" id="toast"></div>
+
+<!-- 忘记密码弹窗 -->
+<div class="modal-overlay" id="forgotPwModal" style="position:fixed;inset:0;background:rgba(74,63,53,.4);display:none;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)">
+  <div class="modal" style="background:var(--card);border-radius:var(--radius);padding:32px;width:100%;max-width:400px;box-shadow:var(--shadow-lg)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="font-size:18px;font-weight:600">找回密码</h3>
+      <button onclick="document.getElementById('forgotPwModal').style.display='none'" style="color:var(--text-faint);font-size:20px;cursor:pointer">&times;</button>
+    </div>
+    <p style="font-size:13px;color:var(--text-soft);line-height:1.7;margin-bottom:16px">当前版本暂不支持自助找回密码。请联系管理员重置密码，或使用其他已注册账号登录。</p>
+    <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:12px;color:var(--text-faint);margin-bottom:4px">管理员联系方式</div>
+      <div style="font-size:13px;color:var(--text)">admin@cijian.example.com</div>
+    </div>
+    <button onclick="document.getElementById('forgotPwModal').style.display='none'" style="width:100%;padding:11px;background:var(--primary);color:#fff;border-radius:10px;font-size:14px;cursor:pointer">我知道了</button>
+  </div>
+</div>
+
+<!-- 用户协议弹窗 -->
+<div class="modal-overlay" id="termsModal" style="position:fixed;inset:0;background:rgba(74,63,53,.4);display:none;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)">
+  <div class="modal" style="background:var(--card);border-radius:var(--radius);padding:32px;width:100%;max-width:520px;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-lg)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="font-size:18px;font-weight:600">用户协议</h3>
+      <button onclick="document.getElementById('termsModal').style.display='none'" style="color:var(--text-faint);font-size:20px;cursor:pointer">&times;</button>
+    </div>
+    <div style="font-size:13px;color:var(--text-soft);line-height:1.9">
+      <p style="margin-bottom:12px"><strong>一、服务说明</strong></p>
+      <p style="margin-bottom:12px">此间是一款面向双人关系的认知与陪伴空间，为用户提供实时聊天、共同记忆、彼此视角、AI助手接待等功能。</p>
+      <p style="margin-bottom:12px"><strong>二、账号注册与使用</strong></p>
+      <p style="margin-bottom:12px">1. 用户需提供真实、准确的信息注册账号。<br>2. 每个用户仅能与一个其他用户建立绑定关系。<br>3. 用户应妥善保管账号密码，因密码泄露导致的损失由用户自行承担。</p>
+      <p style="margin-bottom:12px"><strong>三、用户行为规范</strong></p>
+      <p style="margin-bottom:12px">用户不得利用本服务发布违法、违规、侵权或不良信息，不得干扰服务正常运行。</p>
+      <p style="margin-bottom:12px"><strong>四、AI助手服务</strong></p>
+      <p style="margin-bottom:12px">AI助手根据用户画像提供代回复服务，回复内容仅供参考，不代表用户真实意愿。用户可随时关闭AI助手功能。</p>
+      <p style="margin-bottom:12px"><strong>五、数据与隐私</strong></p>
+      <p style="margin-bottom:12px">我们重视用户隐私，具体数据处理方式详见《隐私政策》。</p>
+      <p style="margin-bottom:12px"><strong>六、协议变更</strong></p>
+      <p>本协议可能根据业务发展进行更新，更新后将在平台公示。</p>
+    </div>
+  </div>
+</div>
+
+<!-- 隐私政策弹窗 -->
+<div class="modal-overlay" id="privacyModal" style="position:fixed;inset:0;background:rgba(74,63,53,.4);display:none;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)">
+  <div class="modal" style="background:var(--card);border-radius:var(--radius);padding:32px;width:100%;max-width:520px;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-lg)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="font-size:18px;font-weight:600">隐私政策</h3>
+      <button onclick="document.getElementById('privacyModal').style.display='none'" style="color:var(--text-faint);font-size:20px;cursor:pointer">&times;</button>
+    </div>
+    <div style="font-size:13px;color:var(--text-soft);line-height:1.9">
+      <p style="margin-bottom:12px"><strong>一、信息收集</strong></p>
+      <p style="margin-bottom:12px">我们收集您主动提供的信息（用户名、昵称、签名、头像）以及使用服务过程中产生的信息（聊天记录、共同记忆、视角内容、AI助手使用数据）。</p>
+      <p style="margin-bottom:12px"><strong>二、信息使用</strong></p>
+      <p style="margin-bottom:12px">1. 提供和维护核心服务功能。<br>2. AI助手根据您的聊天记录生成用户画像，用于在您不在线时代回复。<br>3. 改善和优化服务体验。</p>
+      <p style="margin-bottom:12px"><strong>三、信息共享</strong></p>
+      <p style="margin-bottom:12px">您与绑定对象之间的聊天记录、共同记忆等内容将对绑定对象可见。我们不会向第三方共享您的个人信息，法律法规要求除外。</p>
+      <p style="margin-bottom:12px"><strong>四、信息存储与安全</strong></p>
+      <p style="margin-bottom:12px">我们采取合理的安全措施保护您的信息。您可以随时导出或删除个人数据。注销账号后，相关数据将被删除或匿名化处理。</p>
+      <p style="margin-bottom:12px"><strong>五、您的权利</strong></p>
+      <p style="margin-bottom:12px">您有权访问、更正、删除您的个人信息，有权撤回同意或注销账号。</p>
+      <p><strong>六、联系我们</strong><br>如有隐私相关问题，请联系 admin@cijian.example.com</p>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   此间 · 登录/注册页
+   API 层：当前使用 localStorage 本地模拟，后端接入时替换 API 函数即可
+   ============================================================ */
+
+/* ===== API 封装（预留后端接口） ===== */
+const API = {
+  base: '/api',
+  // 注册
+  async register(data) {
+    // TODO: 后端接入后替换为 fetch(this.base + '/auth/register', ...)
+    return mockRegister(data);
+  },
+  // 登录
+  async login(data) {
+    // TODO: 后端接入后替换为 fetch(this.base + '/auth/login', ...)
+    return mockLogin(data);
+  }
+};
+
+/* ===== 本地模拟实现 ===== */
+const STORE_KEYS = {
+  users: 'cj_users',
+  session: 'cj_session',
+  invites: 'cj_invites'
+};
+
+function getStore(key) {
+  try { return JSON.parse(localStorage.getItem(key)) || {}; }
+  catch { return {}; }
+}
+function setStore(key, val) {
+  localStorage.setItem(key, JSON.stringify(val));
+}
+
+// 简单密码哈希（本地模拟用，生产环境由后端处理）
+function hashPassword(pw) {
+  let hash = 0;
+  const str = pw + '_cj_salt_2024';
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return 'h_' + Math.abs(hash).toString(36) + '_' + btoa(unescape(encodeURIComponent(pw.slice(0,4))));
+}
+
+function generateId() {
+  return 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+function generateInviteCode(userId) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+function mockRegister(data) {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      const users = getStore(STORE_KEYS.users);
+      // 用户名检查
+      if (users[data.username]) {
+        return reject({ field: 'username', message: '该用户名已被注册' });
+      }
+      const userId = generateId();
+      const user = {
+        id: userId,
+        username: data.username,
+        passwordHash: hashPassword(data.password),
+        nickname: data.username,
+        avatar: '',
+        signature: '',
+        createdAt: new Date().toISOString(),
+        boundTo: null,
+        status: 'online'
+      };
+      users[data.username] = user;
+      setStore(STORE_KEYS.users, users);
+
+      // 处理邀请码绑定
+      if (data.inviteCode && data.inviteCode.trim()) {
+        const invites = getStore(STORE_KEYS.invites);
+        const invite = invites[data.inviteCode.trim().toUpperCase()];
+        if (invite && !invite.usedBy && invite.createdBy !== userId) {
+          // 绑定双方
+          const creator = users[Object.keys(users).find(k => users[k].id === invite.createdBy)];
+          if (creator) {
+            creator.boundTo = userId;
+            user.boundTo = creator.id;
+            invite.usedBy = userId;
+            invite.usedAt = new Date().toISOString();
+            setStore(STORE_KEYS.invites, invites);
+            setStore(STORE_KEYS.users, users);
+          }
+        }
+      }
+
+      // 创建会话
+      const session = {
+        userId: userId,
+        username: data.username,
+        token: 'tk_' + Math.random().toString(36).slice(2),
+        loginAt: new Date().toISOString()
+      };
+      setStore(STORE_KEYS.session, session);
+      resolve({ user: { id: userId, username: data.username, nickname: data.username, boundTo: user.boundTo }, session });
+    }, 400);
+  });
+}
+
+function mockLogin(data) {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      const users = getStore(STORE_KEYS.users);
+      const user = users[data.username];
+      if (!user) {
+        return reject({ field: 'username', message: '用户名不存在' });
+      }
+      if (user.passwordHash !== hashPassword(data.password)) {
+        return reject({ field: 'password', message: '密码错误' });
+      }
+      user.status = 'online';
+      users[data.username] = user;
+      setStore(STORE_KEYS.users, users);
+
+      const session = {
+        userId: user.id,
+        username: user.username,
+        token: 'tk_' + Math.random().toString(36).slice(2),
+        loginAt: new Date().toISOString()
+      };
+      setStore(STORE_KEYS.session, session);
+      resolve({ user: { id: user.id, username: user.username, nickname: user.nickname, boundTo: user.boundTo }, session });
+    }, 400);
+  });
+}
+
+/* ===== 页面交互 ===== */
+const $ = id => document.getElementById(id);
+
+// Tab 切换
+const tabBtns = document.querySelectorAll('.tab-btn');
+const loginForm = $('loginForm');
+const registerForm = $('registerForm');
+const formTitle = $('formTitle');
+const formDesc = $('formDesc');
+
+function switchTab(tab) {
+  tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  if (tab === 'login') {
+    loginForm.style.display = '';
+    registerForm.style.display = 'none';
+    formTitle.textContent = '欢迎回来';
+    formDesc.textContent = '登录后进入你们的空间';
+  } else {
+    loginForm.style.display = 'none';
+    registerForm.style.display = '';
+    formTitle.textContent = '创建账号';
+    formDesc.textContent = '注册后开启属于你们的此间';
+  }
+  clearAllErrors();
+}
+tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+$('goRegister').addEventListener('click', e => { e.preventDefault(); switchTab('register'); });
+$('goLogin').addEventListener('click', e => { e.preventDefault(); switchTab('login'); });
+
+// 密码显示切换
+document.querySelectorAll('.toggle-pw').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = $(btn.dataset.target);
+    if (input.type === 'password') { input.type = 'text'; btn.textContent = '隐藏'; }
+    else { input.type = 'password'; btn.textContent = '显示'; }
+  });
+});
+
+// 密码强度检测
+function checkPasswordStrength(pw) {
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (/[a-z]/.test(pw)) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/\d/.test(pw)) score++;
+  return score;
+}
+const pwInput = $('regPassword');
+const pwBars = document.querySelectorAll('#pwStrength .pw-bar');
+const pwLabel = $('pwLabel');
+pwInput.addEventListener('input', () => {
+  const score = checkPasswordStrength(pwInput.value);
+  const labels = ['', '弱', '一般', '较强', '强'];
+  const classes = ['', 'weak', 'weak', 'medium', 'strong'];
+  pwBars.forEach((bar, i) => {
+    bar.className = 'pw-bar' + (i < score ? ' ' + classes[score] : '');
+  });
+  if (pwInput.value.length === 0) {
+    pwLabel.textContent = '密码需至少 8 位，包含大写字母、小写字母和数字';
+  } else {
+    pwLabel.textContent = '强度：' + labels[score];
+  }
+});
+
+// 表单验证
+function validateUsername(name) {
+  if (!name || !name.trim()) return '请输入用户名';
+  if (name.trim().length < 2) return '用户名至少 2 个字符';
+  if (name.trim().length > 20) return '用户名最多 20 个字符';
+  if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(name.trim())) return '用户名只能包含字母、数字、下划线和中文';
+  return '';
+}
+function validatePassword(pw) {
+  if (!pw) return '请输入密码';
+  if (pw.length < 8) return '密码至少 8 位';
+  if (!/[a-z]/.test(pw)) return '密码需包含小写字母';
+  if (!/[A-Z]/.test(pw)) return '密码需包含大写字母';
+  if (!/\d/.test(pw)) return '密码需包含数字';
+  return '';
+}
+
+function showError(inputId, errId, msg) {
+  $(inputId).classList.add('error');
+  $(errId).textContent = msg;
+  $(errId).classList.add('show');
+}
+function clearError(inputId, errId) {
+  $(inputId).classList.remove('error');
+  $(errId).textContent = '';
+  $(errId).classList.remove('show');
+}
+function clearAllErrors() {
+  document.querySelectorAll('.field-error').forEach(e => { e.textContent = ''; e.classList.remove('show'); });
+  document.querySelectorAll('input.error').forEach(i => i.classList.remove('error'));
+}
+
+// 输入时清除错误
+['loginUsername','loginPassword','regUsername','regPassword','regConfirm','regInvite'].forEach(id => {
+  $(id).addEventListener('input', () => {
+    const errMap = {
+      loginUsername:'loginUsernameErr', loginPassword:'loginPasswordErr',
+      regUsername:'regUsernameErr', regPassword:'regPasswordErr',
+      regConfirm:'regConfirmErr', regInvite:'regInviteErr'
+    };
+    clearError(id, errMap[id]);
+  });
+});
+
+// 全局提示
+let toastTimer;
+function showToast(msg, type = '') {
+  const toast = $('toast');
+  toast.textContent = msg;
+  toast.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 2500);
+}
+
+// 登录提交
+loginForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const username = $('loginUsername').value.trim();
+  const password = $('loginPassword').value;
+  let valid = true;
+  const uErr = validateUsername(username);
+  if (uErr) { showError('loginUsername','loginUsernameErr',uErr); valid = false; }
+  if (!password) { showError('loginPassword','loginPasswordErr','请输入密码'); valid = false; }
+  if (!valid) return;
+
+  const btn = $('loginSubmit');
+  btn.disabled = true; btn.textContent = '登录中…';
+  try {
+    const res = await API.login({ username, password });
+    showToast('登录成功，正在进入…', 'success');
+    setTimeout(() => { window.location.href = 'app.html'; }, 600);
+  } catch (err) {
+    if (err.field === 'username') showError('loginUsername','loginUsernameErr',err.message);
+    else if (err.field === 'password') showError('loginPassword','loginPasswordErr',err.message);
+    else showToast(err.message || '登录失败', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '登录';
+  }
+});
+
+// 注册提交
+registerForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const username = $('regUsername').value.trim();
+  const password = $('regPassword').value;
+  const confirm = $('regConfirm').value;
+  const inviteCode = $('regInvite').value.trim();
+  let valid = true;
+
+  const uErr = validateUsername(username);
+  if (uErr) { showError('regUsername','regUsernameErr',uErr); valid = false; }
+  const pErr = validatePassword(password);
+  if (pErr) { showError('regPassword','regPasswordErr',pErr); valid = false; }
+  if (!confirm) { showError('regConfirm','regConfirmErr','请再次输入密码'); valid = false; }
+  else if (confirm !== password) { showError('regConfirm','regConfirmErr','两次输入的密码不一致'); valid = false; }
+  if (inviteCode && !/^[A-Za-z0-9]{6,12}$/.test(inviteCode)) {
+    showError('regInvite','regInviteErr','邀请码格式不正确'); valid = false;
+  }
+  if (!$('agreeTerms').checked) {
+    $('agreeTermsErr').style.display = 'block';
+    valid = false;
+  }
+  if (!valid) return;
+
+  const btn = $('registerSubmit');
+  btn.disabled = true; btn.textContent = '注册中…';
+  try {
+    const res = await API.register({ username, password, inviteCode });
+    const boundMsg = res.user.boundTo ? '，已与邀请方绑定' : '';
+    showToast('注册成功' + boundMsg + '，正在进入…', 'success');
+    setTimeout(() => { window.location.href = 'app.html'; }, 800);
+  } catch (err) {
+    if (err.field === 'username') showError('regUsername','regUsernameErr',err.message);
+    else if (err.field === 'inviteCode') showError('regInvite','regInviteErr',err.message);
+    else showToast(err.message || '注册失败', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '注册并进入';
+  }
+});
+
+// 初始化默认测试账号（首次打开时自动创建）
+(function initDemoAccount() {
+  try {
+    const users = JSON.parse(localStorage.getItem('cj_users')) || {};
+    if (Object.keys(users).length === 0) {
+      const demoPw = 'Demo1234';
+      let hash = 0;
+      const str = demoPw + '_cj_salt_2024';
+      for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash |= 0; }
+      const pwHash = 'h_' + Math.abs(hash).toString(36) + '_' + btoa(unescape(encodeURIComponent(demoPw.slice(0,4))));
+      users['demo'] = {
+        id: 'u_demo_' + Date.now().toString(36),
+        username: 'demo',
+        passwordHash: pwHash,
+        nickname: '演示用户',
+        avatar: '',
+        signature: '',
+        createdAt: new Date().toISOString(),
+        boundTo: null,
+        status: 'online'
+      };
+      localStorage.setItem('cj_users', JSON.stringify(users));
+    }
+  } catch {}
+})();
+
+// 已登录则直接跳转
+(function autoRedirect() {
+  try {
+    const session = JSON.parse(localStorage.getItem('cj_session'));
+    if (session && session.token) {
+      // 不自动跳转，让用户可以切换账号；但可在此处加提示
+    }
+  } catch {}
+})();
+
+// 忘记密码
+$('forgotPwLink').addEventListener('click', e => {
+  e.preventDefault();
+  document.getElementById('forgotPwModal').style.display = 'flex';
+});
+
+// 用户协议
+$('termsLink').addEventListener('click', e => {
+  e.preventDefault();
+  document.getElementById('termsModal').style.display = 'flex';
+});
+
+// 隐私政策
+$('privacyLink').addEventListener('click', e => {
+  e.preventDefault();
+  document.getElementById('privacyModal').style.display = 'flex';
+});
+
+// 点击弹窗背景关闭
+['forgotPwModal','termsModal','privacyModal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', e => {
+    if (e.target.id === id) e.target.style.display = 'none';
+  });
+});
+
+// 勾选用户协议时清除错误
+$('agreeTerms').addEventListener('change', () => {
+  if ($('agreeTerms').checked) $('agreeTermsErr').style.display = 'none';
+});
+
+// 演示账号快速登录
+$('demoLoginBtn').addEventListener('click', async () => {
+  $('loginUsername').value = 'demo';
+  $('loginPassword').value = 'Demo1234';
+  loginForm.requestSubmit();
+});
+</script>
+</body>
+</html>

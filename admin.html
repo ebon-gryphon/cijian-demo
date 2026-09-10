@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>此间 · 管理后台</title>
+<link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f6f8;--sidebar:#1e293b;--sidebar-hover:#334155;--sidebar-active:#3b82f6;
+  --card:#fff;--text:#1e293b;--text-soft:#64748b;--text-faint:#94a3b8;
+  --border:#e2e8f0;--primary:#3b82f6;--primary-hover:#2563eb;--primary-bg:#eff6ff;
+  --success:#10b981;--error:#ef4444;--warning:#f59e0b;--radius:10px;
+  --shadow:0 1px 3px rgba(0,0,0,.08);--shadow-lg:0 4px 16px rgba(0,0,0,.1);
+}
+html,body{height:100%}
+body{font-family:'Noto Sans SC',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+input,textarea,select{font-family:inherit;outline:none}
+a{color:var(--primary);text-decoration:none}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ===== 登录页 ===== */
+.login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e293b 0%,#334155 100%);padding:20px}
+.login-card{background:var(--card);border-radius:16px;box-shadow:var(--shadow-lg);padding:40px;width:100%;max-width:400px}
+.login-card h1{font-size:22px;font-weight:700;text-align:center;margin-bottom:6px}
+.login-card .sub{text-align:center;color:var(--text-soft);font-size:13px;margin-bottom:28px}
+.login-card .field{margin-bottom:16px}
+.login-card label{display:block;font-size:13px;font-weight:500;margin-bottom:6px}
+.login-card input{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;transition:border-color .2s}
+.login-card input:focus{border-color:var(--primary)}
+.login-card .submit{width:100%;padding:12px;background:var(--primary);color:#fff;border-radius:8px;font-size:15px;font-weight:500;transition:background .2s;margin-top:8px}
+.login-card .submit:hover{background:var(--primary-hover)}
+.login-card .hint{text-align:center;font-size:12px;color:var(--text-faint);margin-top:16px}
+.login-card .error-msg{color:var(--error);font-size:13px;text-align:center;margin-bottom:12px;display:none}
+
+/* ===== 后台布局 ===== */
+.admin-layout{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:220px;min-width:220px;background:var(--sidebar);color:#cbd5e1;display:flex;flex-direction:column}
+.sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-logo .logo-name{font-size:18px;font-weight:700;color:#fff}
+.sidebar-logo .logo-sub{font-size:11px;color:#64748b;letter-spacing:.1em}
+.sidebar-nav{flex:1;padding:12px 8px;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;color:#cbd5e1;font-size:13px;cursor:pointer;transition:all .15s;margin-bottom:2px;width:100%;text-align:left}
+.nav-item:hover{background:var(--sidebar-hover);color:#fff}
+.nav-item.active{background:var(--sidebar-active);color:#fff}
+.nav-item svg{width:16px;height:16px;flex-shrink:0}
+.sidebar-footer{padding:14px;border-top:1px solid rgba(255,255,255,.08)}
+.sidebar-footer .admin-info{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.sidebar-footer .admin-avatar{width:32px;height:32px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
+.sidebar-footer .admin-name{font-size:13px;color:#fff;font-weight:500}
+.sidebar-footer .admin-role{font-size:11px;color:#64748b}
+.sidebar-footer .logout-btn{width:100%;padding:8px;border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#cbd5e1;font-size:12px;transition:all .15s}
+.sidebar-footer .logout-btn:hover{border-color:var(--error);color:var(--error)}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.topbar{height:56px;min-height:56px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.topbar h2{font-size:17px;font-weight:600}
+.topbar .topbar-actions{display:flex;align-items:center;gap:10px}
+.content{flex:1;overflow-y:auto;padding:24px}
+
+/* ===== 通用组件 ===== */
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:20px}
+.card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-header h3{font-size:15px;font-weight:600}
+.card-body{padding:20px}
+.btn{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-hover)}
+.btn-ghost{border:1px solid var(--border);color:var(--text-soft)}
+.btn-ghost:hover{border-color:var(--primary);color:var(--primary)}
+.btn-danger{background:var(--error);color:#fff}
+.btn-danger:hover{background:#dc2626}
+.btn-sm{padding:5px 12px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+.input,.textarea,.select{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;transition:border-color .2s;background:#fff}
+.input:focus,.textarea:focus,.select:focus{border-color:var(--primary)}
+.textarea{resize:vertical;min-height:80px;font-family:inherit}
+.label{display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:var(--text)}
+.form-row{margin-bottom:16px}
+.form-hint{font-size:12px;color:var(--text-faint);margin-top:5px}
+
+/* 表格 */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:12px 16px;background:#f8fafc;color:var(--text-soft);font-weight:500;font-size:12px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:12px 16px;border-bottom:1px solid var(--border-light);color:var(--text)}
+tr:hover td{background:#f8fafc}
+.tag{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:500}
+.tag-success{background:#dcfce7;color:#16a34a}
+.tag-error{background:#fee2e2;color:#dc2626}
+.tag-warning{background:#fef3c7;color:#d97706}
+.tag-info{background:#dbeafe;color:#2563eb}
+.tag-gray{background:#f1f5f9;color:#64748b}
+
+/* 统计卡片 */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.stat-card .stat-label{font-size:12px;color:var(--text-soft);margin-bottom:8px}
+.stat-card .stat-value{font-size:28px;font-weight:700;color:var(--text)}
+.stat-card .stat-change{font-size:12px;margin-top:6px}
+.stat-card .stat-change.up{color:var(--success)}
+.stat-card .stat-change.down{color:var(--error)}
+
+/* 图表 */
+.charts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:24px}
+@media(max-width:900px){.charts-grid{grid-template-columns:1fr}}
+.chart-card{background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.chart-card .chart-title{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text)}
+.bar-chart{display:flex;align-items:flex-end;gap:8px;height:140px;padding-top:10px}
+.bar-chart .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.bar-chart .bar-fill{width:100%;background:linear-gradient(180deg,var(--primary),#60a5fa);border-radius:4px 4px 0 0;min-height:4px;transition:height .3s}
+.bar-chart .bar-label{font-size:10px;color:var(--text-faint)}
+.line-chart{position:relative;height:140px;padding:10px 0}
+.line-chart svg{width:100%;height:100%}
+.donut-wrap{display:flex;align-items:center;gap:20px}
+.donut{width:120px;height:120px;flex-shrink:0}
+.donut-legend{flex:1;font-size:12px}
+.donut-legend .legend-item{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.donut-legend .legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.donut-legend .legend-label{color:var(--text-soft);flex:1}
+.donut-legend .legend-value{font-weight:600;color:var(--text)}
+.system-status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.status-item{padding:14px;background:var(--bg);border-radius:8px}
+.status-item .status-label{font-size:12px;color:var(--text-soft);margin-bottom:6px}
+.status-item .status-value{font-size:18px;font-weight:700;color:var(--text)}
+.status-item .status-sub{font-size:11px;color:var(--text-faint);margin-top:4px}
+.status-item .status-value.ok{color:var(--success)}
+.status-item .status-value.warn{color:var(--warning)}
+.status-item .status-value.err{color:var(--error)}
+
+/* 开关 */
+.switch{width:38px;height:22px;border-radius:11px;background:var(--border);position:relative;cursor:pointer;transition:background .2s;display:inline-block}
+.switch.on{background:var(--primary)}
+.switch::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.switch.on::after{transform:translateX(16px)}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(2px)}
+.modal-overlay.show{display:flex}
+.modal{background:var(--card);border-radius:12px;box-shadow:var(--shadow-lg);width:90%;max-width:520px;max-height:85vh;overflow-y:auto;animation:modalIn .2s ease}
+@keyframes modalIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-header h3{font-size:16px;font-weight:600}
+.modal-close{width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-faint);transition:all .15s}
+.modal-close:hover{background:#f1f5f9;color:var(--text)}
+.modal-body{padding:20px}
+.modal-footer{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px}
+
+/* Toast */
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-16px);background:var(--text);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;opacity:0;transition:all .25s;z-index:999;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.error{background:var(--error)}
+.toast.success{background:var(--success)}
+
+/* API Key 列表 */
+.api-key-item{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;background:#f8fafc}
+.api-key-item .key-info{flex:1;min-width:0}
+.api-key-item .key-name{font-size:14px;font-weight:500;margin-bottom:3px}
+.api-key-item .key-meta{font-size:12px;color:var(--text-faint);display:flex;gap:14px;flex-wrap:wrap}
+.api-key-item .key-actions{display:flex;gap:6px;margin-left:12px}
+.key-value{font-family:monospace;font-size:12px;background:#fff;padding:2px 8px;border-radius:4px;border:1px solid var(--border);letter-spacing:.5px}
+
+/* 日志 */
+.log-item{padding:10px 16px;border-bottom:1px solid var(--border-light);font-size:13px;display:flex;gap:12px;align-items:flex-start}
+.log-item .log-time{color:var(--text-faint);font-size:12px;white-space:nowrap;font-family:monospace}
+.log-item .log-action{font-weight:500;min-width:80px}
+.log-item .log-detail{color:var(--text-soft);flex:1}
+
+/* 空状态 */
+.empty{text-align:center;padding:40px 20px;color:var(--text-faint)}
+.empty .empty-icon{width:48px;height:48px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+.empty h4{font-size:14px;color:var(--text-soft);margin-bottom:4px}
+.empty p{font-size:12px}
+
+/* 响应式 */
+@media(max-width:768px){
+  .sidebar{width:60px;min-width:60px}
+  .sidebar-logo .logo-sub,.nav-item span,.sidebar-footer .admin-name,.sidebar-footer .admin-role,.sidebar-footer .logout-btn{display:none}
+  .nav-item{justify-content:center;padding:10px}
+  .content{padding:16px}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== 登录页 ===== -->
+<div class="login-page" id="loginPage">
+  <div class="login-card">
+    <h1>此间管理后台</h1>
+    <p class="sub">管理员登录</p>
+    <div class="error-msg" id="loginError"></div>
+    <div class="field">
+      <label>管理员账号</label>
+      <input type="text" id="adminUsername" placeholder="请输入管理员账号" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>密码</label>
+      <input type="password" id="adminPassword" placeholder="请输入密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')adminLogin()">
+    </div>
+    <button class="submit" onclick="adminLogin()">登录</button>
+    <p class="hint">默认账号 admin / admin123，首次登录请修改密码</p>
+  </div>
+</div>
+
+<!-- ===== 后台主界面 ===== -->
+<div class="admin-layout" id="adminLayout" style="display:none">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-name">此间</div>
+      <div class="logo-sub">ADMIN CONSOLE</div>
+    </div>
+    <nav class="sidebar-nav" id="adminNav">
+      <button class="nav-item active" data-page="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>仪表盘</span>
+      </button>
+      <button class="nav-item" data-page="apikeys">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        <span>API 密钥</span>
+      </button>
+      <button class="nav-item" data-page="prompts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>AI 提示词</span>
+      </button>
+      <button class="nav-item" data-page="users">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>用户管理</span>
+      </button>
+      <button class="nav-item" data-page="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>系统设置</span>
+      </button>
+      <button class="nav-item" data-page="logs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        <span>操作日志</span>
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="admin-info">
+        <div class="admin-avatar" id="adminAvatar">A</div>
+        <div>
+          <div class="admin-name" id="adminName">admin</div>
+          <div class="admin-role">超级管理员</div>
+        </div>
+      </div>
+      <button class="logout-btn" onclick="adminLogout()">退出登录</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h2 id="pageTitle">仪表盘</h2>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost btn-sm" onclick="changeAdminPassword()">修改密码</button>
+      </div>
+    </header>
+    <div class="content" id="pageContent"></div>
+  </main>
+</div>
+
+<!-- ===== API Key 编辑弹窗 ===== -->
+<div class="modal-overlay" id="apiKeyModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="apiKeyModalTitle">添加 API 密钥</h3>
+      <button class="modal-close" onclick="closeModal('apiKeyModal')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="apiKeyId">
+      <div class="form-row">
+        <label class="label">名称</label>
+        <input class="input" id="apiKeyName" placeholder="如：默认密钥、备用密钥">
+      </div>
+      <div class="form-row">
+        <label class="label">API Key</label>
+        <input class="input" id="apiKeyValue" placeholder="sk-..." type="password">
+        <div class="form-hint">密钥仅保存在服务器端，不会明文展示</div>
+      </div>
+      <div class="form-row">
+        <label class="label">模型 ID</label>
+        <input class="input" id="apiKeyModel" placeholder="如：gpt-4o-mini、deepseek-chat">
+      </div>
+      <div class="form-row">
+        <label class="label">API 地址（选填）</label>
+        <input class="input" id="apiKeyBaseUrl" placeholder="默认 https://api.openai.com/v1">
+        <div class="form-hint">兼容 OpenAI Chat Completions 格式的服务地址</div>
+      </div>
+      <div class="form-row">
+        <label class="label">状态</label>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="switch on" id="apiKeyStatus" onclick="this.classList.toggle('on')"></div>
+          <span style="font-size:13px;color:var(--text-soft)">启用后可被 AI 服务调用</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('apiKeyModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveApiKey()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 修改管理员密码弹窗 ===== -->
+<div class="modal-overlay" id="changePwModal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h3>修改管理员密码</h3>
+      <button class="modal-close" onclick="closeModal('changePwModal')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label class="label">当前密码</label>
+        <input class="input" type="password" id="adminOldPw">
+      </div>
+      <div class="form-row">
+        <label class="label">新密码</label>
+        <input class="input" type="password" id="adminNewPw" placeholder="至少8位，含大小写字母和数字">
+      </div>
+      <div class="form-row">
+        <label class="label">确认新密码</label>
+        <input class="input" type="password" id="adminConfirmPw">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('changePwModal')">取消</button>
+      <button class="btn btn-primary" onclick="submitAdminPw()">确认修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   此间 · 管理后台
+   当前使用 localStorage 本地模拟，后端接入时替换 API 函数即可
+   ============================================================ */
+
+const STORE = {
+  admin: 'cj_admin', adminSession: 'cj_admin_session',
+  apiKeys: 'cj_admin_apikeys', prompts: 'cj_admin_prompts',
+  settings: 'cj_admin_settings', logs: 'cj_admin_logs',
+  get(k){ try{return JSON.parse(localStorage.getItem(k))}catch{return null} },
+  set(k,v){ localStorage.setItem(k,JSON.stringify(v)) }
+};
+
+/* ===== 管理员认证 ===== */
+function ensureAdminExists() {
+  let admin = STORE.get(STORE.admin);
+  if (!admin) {
+    admin = { username:'admin', passwordHash:hashPw('admin123'), createdAt:new Date().toISOString(), mustChangePassword:true };
+    STORE.set(STORE.admin, admin);
+  }
+  return admin;
+}
+function hashPw(pw) {
+  let h = 0; const s = pw + '_cj_admin_salt';
+  for (let i=0;i<s.length;i++){ h=((h<<5)-h)+s.charCodeAt(i); h|=0; }
+  return 'a_'+Math.abs(h).toString(36);
+}
+function adminLogin() {
+  const username = document.getElementById('adminUsername').value.trim();
+  const password = document.getElementById('adminPassword').value;
+  const errEl = document.getElementById('loginError');
+  if (!username || !password) { errEl.textContent='请输入账号和密码'; errEl.style.display='block'; return; }
+  const admin = ensureAdminExists();
+  if (username !== admin.username || hashPw(password) !== admin.passwordHash) {
+    errEl.textContent = '账号或密码错误'; errEl.style.display = 'block'; return;
+  }
+  STORE.set(STORE.adminSession, { username, loginAt:new Date().toISOString() });
+  errEl.style.display = 'none';
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('adminLayout').style.display = 'flex';
+  document.getElementById('adminName').textContent = username;
+  addLog('登录', '管理员 ' + username + ' 登录后台');
+  if (admin.mustChangePassword) {
+    showToast('首次登录，请修改密码', 'warning');
+    setTimeout(() => changeAdminPassword(), 800);
+  }
+  renderPage('dashboard');
+}
+function adminLogout() {
+  if (!confirm('确定退出登录吗？')) return;
+  addLog('退出', '管理员退出登录');
+  localStorage.removeItem(STORE.adminSession);
+  document.getElementById('adminLayout').style.display = 'none';
+  document.getElementById('loginPage').style.display = 'flex';
+  document.getElementById('adminUsername').value = '';
+  document.getElementById('adminPassword').value = '';
+}
+function checkAuth() {
+  const session = STORE.get(STORE.adminSession);
+  if (session) {
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('adminLayout').style.display = 'flex';
+    document.getElementById('adminName').textContent = session.username;
+    renderPage('dashboard');
+  } else {
+    ensureAdminExists();
+  }
+}
+
+/* ===== 页面切换 ===== */
+const PAGE_TITLES = { dashboard:'仪表盘', apikeys:'API 密钥管理', prompts:'AI 提示词设置', users:'用户管理', settings:'系统设置', logs:'操作日志' };
+function renderPage(page) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+  document.getElementById('pageTitle').textContent = PAGE_TITLES[page] || '';
+  const content = document.getElementById('pageContent');
+  switch(page) {
+    case 'dashboard': renderDashboard(content); break;
+    case 'apikeys': renderApiKeys(content); break;
+    case 'prompts': renderPrompts(content); break;
+    case 'users': renderUsers(content); break;
+    case 'settings': renderSettings(content); break;
+    case 'logs': renderLogs(content); break;
+  }
+}
+document.querySelectorAll('.nav-item').forEach(n => n.addEventListener('click', () => renderPage(n.dataset.page)));
+
+/* ===== 仪表盘 ===== */
+function renderDashboard(el) {
+  const users = STORE.get('cj_users') || {};
+  const userList = Object.values(users);
+  const boundCount = userList.filter(u => u.boundTo).length / 2;
+  const apiKeys = STORE.get(STORE.apiKeys) || [];
+  const activeKeys = apiKeys.filter(k => k.enabled).length;
+  const settings = getSettings();
+  const logs = STORE.get(STORE.logs) || [];
+
+  // 生成近7天模拟数据（实际后端接入后替换为真实数据）
+  const days = [];
+  const userGrowth = [];
+  const msgVolume = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    days.push((d.getMonth()+1) + '/' + d.getDate());
+    userGrowth.push(Math.floor(userList.length * (0.7 + Math.random() * 0.3)));
+    msgVolume.push(Math.floor(20 + Math.random() * 80));
+  }
+  const maxMsg = Math.max(...msgVolume, 1);
+  const aiUsage = [
+    { label: 'AI 代回复', value: Math.floor(40 + Math.random()*30), color: '#3b82f6' },
+    { label: '人工回复', value: Math.floor(20 + Math.random()*20), color: '#10b981' },
+    { label: '待回应', value: Math.floor(5 + Math.random()*10), color: '#f59e0b' }
+  ];
+  const aiTotal = aiUsage.reduce((s,i) => s+i.value, 0);
+  const bindRatio = [
+    { label: '已绑定', value: Math.floor(boundCount*2), color: '#3b82f6' },
+    { label: '未绑定', value: userList.length - Math.floor(boundCount*2), color: '#e2e8f0' }
+  ];
+  const bindTotal = Math.max(bindRatio.reduce((s,i) => s+i.value, 0), 1);
+
+  // 系统状态模拟数据
+  const todayCalls = Math.floor(100 + Math.random() * 500);
+  const successRate = (95 + Math.random() * 4.9).toFixed(1);
+  const storageUsed = (Math.random() * 50 + 10).toFixed(1);
+  const errorLogs = logs.filter(l => l.level === 'error').length;
+
+  el.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">注册用户</div><div class="stat-value">${userList.length}</div><div class="stat-change up">+${Math.max(0,userList.length)} 总数</div></div>
+      <div class="stat-card"><div class="stat-label">已绑定对数</div><div class="stat-value">${Math.floor(boundCount)}</div><div class="stat-change">绑定率 ${userList.length?Math.round(boundCount*2/userList.length*100):0}%</div></div>
+      <div class="stat-card"><div class="stat-label">活跃 API 密钥</div><div class="stat-value">${activeKeys}</div><div class="stat-change">共 ${apiKeys.length} 个密钥</div></div>
+      <div class="stat-card"><div class="stat-label">AI 服务状态</div><div class="stat-value" style="color:${settings.aiEnabled?'var(--success)':'var(--error)'}">${settings.aiEnabled?'运行中':'已停用'}</div><div class="stat-change">${settings.aiEnabled?'AI 助手已启用':'AI 助手已全局停用'}</div></div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">用户增长趋势（近7天）</div>
+        <div class="line-chart">
+          <svg viewBox="0 0 300 120" preserveAspectRatio="none">
+            <line x1="0" y1="120" x2="300" y2="120" stroke="#e2e8f0" stroke-width="1"/>
+            <polyline points="${userGrowth.map((v,i) => (i*50) + ',' + (110 - (v/Math.max(...userGrowth,1))*100)).join(' ')}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            ${userGrowth.map((v,i) => `<circle cx="${i*50}" cy="${110 - (v/Math.max(...userGrowth,1))*100}" r="3" fill="#3b82f6"/>`).join('')}
+          </svg>
+          <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--text-faint)">
+            ${days.map(d => `<span>${d}</span>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">每日消息量（近7天）</div>
+        <div class="bar-chart">
+          ${msgVolume.map((v,i) => `<div class="bar"><div class="bar-fill" style="height:${(v/maxMsg)*100}%"></div><span class="bar-label">${days[i]}</span></div>`).join('')}
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">AI 助手使用分布</div>
+        <div class="donut-wrap">
+          <svg class="donut" viewBox="0 0 42 42">
+            ${(() => {
+              let offset = 25;
+              return aiUsage.map(item => {
+                const pct = (item.value / aiTotal) * 100;
+                const dash = `${pct} ${100 - pct}`;
+                const el = `<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="${item.color}" stroke-width="6" stroke-dasharray="${dash}" stroke-dashoffset="${offset}"/>`;
+                offset -= pct;
+                return el;
+              }).join('');
+            })()}
+            <text x="21" y="23" text-anchor="middle" font-size="7" font-weight="700" fill="#1e293b">${aiTotal}</text>
+          </svg>
+          <div class="donut-legend">
+            ${aiUsage.map(item => `<div class="legend-item"><span class="legend-dot" style="background:${item.color}"></span><span class="legend-label">${item.label}</span><span class="legend-value">${item.value}</span></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">绑定关系占比</div>
+        <div class="donut-wrap">
+          <svg class="donut" viewBox="0 0 42 42">
+            ${(() => {
+              let offset = 25;
+              return bindRatio.map(item => {
+                const pct = (item.value / bindTotal) * 100;
+                const dash = `${pct} ${100 - pct}`;
+                const el = `<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="${item.color}" stroke-width="6" stroke-dasharray="${dash}" stroke-dashoffset="${offset}"/>`;
+                offset -= pct;
+                return el;
+              }).join('');
+            })()}
+            <text x="21" y="23" text-anchor="middle" font-size="7" font-weight="700" fill="#1e293b">${userList.length}</text>
+          </svg>
+          <div class="donut-legend">
+            ${bindRatio.map(item => `<div class="legend-item"><span class="legend-dot" style="background:${item.color}"></span><span class="legend-label">${item.label}</span><span class="legend-value">${item.value}人</span></div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-header"><h3>系统状态监控</h3></div>
+      <div class="card-body">
+        <div class="system-status-grid">
+          <div class="status-item">
+            <div class="status-label">API 密钥状态</div>
+            <div class="status-value ${activeKeys > 0 ? 'ok' : 'err'}">${activeKeys > 0 ? '正常' : '未配置'}</div>
+            <div class="status-sub">${activeKeys} 个密钥可用</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">今日 AI 调用</div>
+            <div class="status-value">${todayCalls}</div>
+            <div class="status-sub">次</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">调用成功率</div>
+            <div class="status-value ${successRate >= 95 ? 'ok' : 'warn'}">${successRate}%</div>
+            <div class="status-sub">近24小时</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">存储使用量</div>
+            <div class="status-value ${storageUsed < 70 ? 'ok' : 'warn'}">${storageUsed}%</div>
+            <div class="status-sub">本地存储配额</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">最近错误日志</div>
+            <div class="status-value ${errorLogs === 0 ? 'ok' : 'err'}">${errorLogs}</div>
+            <div class="status-sub">条错误记录</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">服务运行时长</div>
+            <div class="status-value ok">正常</div>
+            <div class="status-sub">持续运行中</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>最近操作</h3><button class="btn btn-ghost btn-sm" onclick="renderPage('logs')">查看全部</button></div>
+      <div class="card-body" style="padding:0">
+        ${logs.slice(0,8).map(log => `<div class="log-item"><span class="log-time">${formatTime(log.time)}</span><span class="log-action">${log.action}</span><span class="log-detail">${log.detail}</span></div>`).join('') || '<div class="empty"><h4>暂无操作记录</h4></div>'}
+      </div>
+    </div>
+  `;
+}
+
+/* ===== API 密钥 ===== */
+function renderApiKeys(el) {
+  const keys = STORE.get(STORE.apiKeys) || [];
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-header"><h3>API 密钥列表</h3><button class="btn btn-primary btn-sm" onclick="openApiKeyModal()">+ 添加密钥</button></div>
+      <div class="card-body">
+        ${keys.length === 0 ? '<div class="empty"><div class="empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div><h4>还没有 API 密钥</h4><p>添加密钥后 AI 服务才能正常调用</p></div>' :
+        keys.map(k => `
+          <div class="api-key-item">
+            <div class="key-info">
+              <div class="key-name">${k.name} ${k.enabled?'<span class="tag tag-success" style="margin-left:8px">启用中</span>':'<span class="tag tag-gray" style="margin-left:8px">已停用</span>'}</div>
+              <div class="key-meta">
+                <span>模型：${k.model||'-'}</span>
+                <span class="key-value">${maskKey(k.key)}</span>
+                <span>调用：${k.callCount||0} 次</span>
+                <span>创建：${formatDate(k.createdAt)}</span>
+              </div>
+            </div>
+            <div class="key-actions">
+              <button class="btn btn-ghost btn-sm" onclick="editApiKey('${k.id}')">编辑</button>
+              <button class="btn btn-ghost btn-sm" onclick="toggleApiKey('${k.id}')">${k.enabled?'停用':'启用'}</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteApiKey('${k.id}')">删除</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+function maskKey(key) { return key ? key.slice(0,7) + '...' + key.slice(-4) : '-'; }
+function openApiKeyModal() {
+  document.getElementById('apiKeyModalTitle').textContent = '添加 API 密钥';
+  document.getElementById('apiKeyId').value = '';
+  document.getElementById('apiKeyName').value = '';
+  document.getElementById('apiKeyValue').value = '';
+  document.getElementById('apiKeyModel').value = '';
+  document.getElementById('apiKeyBaseUrl').value = '';
+  document.getElementById('apiKeyStatus').classList.add('on');
+  openModal('apiKeyModal');
+}
+function editApiKey(id) {
+  const keys = STORE.get(STORE.apiKeys) || [];
+  const k = keys.find(x => x.id === id);
+  if (!k) return;
+  document.getElementById('apiKeyModalTitle').textContent = '编辑 API 密钥';
+  document.getElementById('apiKeyId').value = k.id;
+  document.getElementById('apiKeyName').value = k.name;
+  document.getElementById('apiKeyValue').value = k.key;
+  document.getElementById('apiKeyModel').value = k.model || '';
+  document.getElementById('apiKeyBaseUrl').value = k.baseUrl || '';
+  document.getElementById('apiKeyStatus').classList.toggle('on', !!k.enabled);
+  openModal('apiKeyModal');
+}
+function saveApiKey() {
+  const id = document.getElementById('apiKeyId').value;
+  const name = document.getElementById('apiKeyName').value.trim();
+  const key = document.getElementById('apiKeyValue').value.trim();
+  const model = document.getElementById('apiKeyModel').value.trim();
+  const baseUrl = document.getElementById('apiKeyBaseUrl').value.trim();
+  const enabled = document.getElementById('apiKeyStatus').classList.contains('on');
+  if (!name) { showToast('请填写名称', 'error'); return; }
+  if (!id && !key) { showToast('请填写 API Key', 'error'); return; }
+  let keys = STORE.get(STORE.apiKeys) || [];
+  if (id) {
+    keys = keys.map(k => k.id === id ? {...k, name, model, baseUrl, enabled, key: key||k.key, updatedAt:new Date().toISOString()} : k);
+    addLog('编辑', '编辑 API 密钥：' + name);
+  } else {
+    keys.push({ id:'k_'+Date.now(), name, key, model, baseUrl, enabled, callCount:0, createdAt:new Date().toISOString() });
+    addLog('添加', '添加 API 密钥：' + name);
+  }
+  STORE.set(STORE.apiKeys, keys);
+  closeModal('apiKeyModal');
+  renderApiKeys(document.getElementById('pageContent'));
+  showToast('保存成功', 'success');
+}
+function toggleApiKey(id) {
+  let keys = STORE.get(STORE.apiKeys) || [];
+  keys = keys.map(k => k.id === id ? {...k, enabled:!k.enabled} : k);
+  STORE.set(STORE.apiKeys, keys);
+  const k = keys.find(x => x.id === id);
+  addLog('状态', (k.enabled?'启用':'停用') + ' API 密钥：' + k.name);
+  renderApiKeys(document.getElementById('pageContent'));
+}
+function deleteApiKey(id) {
+  if (!confirm('确定删除此 API 密钥吗？')) return;
+  let keys = STORE.get(STORE.apiKeys) || [];
+  const k = keys.find(x => x.id === id);
+  keys = keys.filter(x => x.id !== id);
+  STORE.set(STORE.apiKeys, keys);
+  addLog('删除', '删除 API 密钥：' + (k?k.name:id));
+  renderApiKeys(document.getElementById('pageContent'));
+  showToast('已删除');
+}
+
+/* ===== AI 提示词 ===== */
+function renderPrompts(el) {
+  const prompts = STORE.get(STORE.prompts) || getDefaultPrompts();
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-header"><h3>全局系统提示词</h3><span class="tag tag-info">AI 助手核心配置</span></div>
+      <div class="card-body">
+        <div class="form-row">
+          <label class="label">默认系统提示词</label>
+          <textarea class="textarea" id="promptDefault" rows="8">${prompts.default||''}</textarea>
+          <div class="form-hint">AI 助手代回复时的基础指令，定义角色、语气边界和重要规则</div>
+        </div>
+        <button class="btn btn-primary" onclick="savePrompt('default')">保存默认提示词</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>场景提示词模板</h3></div>
+      <div class="card-body">
+        ${[
+          {key:'busy',label:'忙碌接待',desc:'用户标记忙碌时，AI 代回复的语气和策略'},
+          {key:'emotion',label:'情感回应',desc:'对方表达难过、委屈等情绪时的回应方式'},
+          {key:'daily',label:'日常闲聊',desc:'普通日常对话的回应风格'}
+        ].map(p => `
+          <div class="form-row">
+            <label class="label">${p.label}</label>
+            <div class="form-hint" style="margin-bottom:6px">${p.desc}</div>
+            <textarea class="textarea" id="prompt_${p.key}" rows="4">${prompts[p.key]||''}</textarea>
+            <div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="savePrompt('${p.key}')">保存</button></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+function getDefaultPrompts() {
+  return {
+    default: '你是用户的 AI 助手，在用户忙碌或离开时，根据用户的画像和口吻，代用户回复绑定对象的消息。重要原则：1. 始终模仿用户的语气和表达习惯；2. 涉及感情态度、重要决定和承诺时，不替用户做决定，告知对方用户会亲自回复；3. 回复要自然、简短，不要暴露你是 AI；4. 可以引用双方确认过的共同记忆。',
+    busy: '用户现在忙碌，回复要简洁，告知正在忙但会记得对方说的话，语气温暖不敷衍。',
+    emotion: '对方表达情绪时，先共情和倾听，不急着给建议。用用户习惯的方式表达关心。',
+    daily: '日常闲聊保持轻松自然，像用户本人一样回应，可以分享小日常或关心对方。'
+  };
+}
+function savePrompt(key) {
+  let prompts = STORE.get(STORE.prompts) || getDefaultPrompts();
+  const el = document.getElementById(key === 'default' ? 'promptDefault' : 'prompt_'+key);
+  if (!el) return;
+  prompts[key] = el.value;
+  STORE.set(STORE.prompts, prompts);
+  addLog('保存', '保存 AI 提示词：' + key);
+  showToast('提示词已保存', 'success');
+}
+
+/* ===== 用户管理 ===== */
+function renderUsers(el) {
+  const users = STORE.get('cj_users') || {};
+  const userList = Object.values(users).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3>用户列表（${userList.length}）</h3>
+        <input class="input" style="width:200px" placeholder="搜索用户名..." oninput="filterUsers(this.value)">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>用户名</th><th>昵称</th><th>绑定状态</th><th>状态</th><th>注册时间</th><th>最后登录</th><th>操作</th></tr></thead>
+          <tbody id="userTableBody">
+            ${userList.map(u => renderUserRow(u)).join('') || '<tr><td colspan="7"><div class="empty"><h4>暂无用户</h4></div></td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+function renderUserRow(u) {
+  const users = STORE.get('cj_users') || {};
+  const partner = u.boundTo ? Object.values(users).find(x => x.id === u.boundTo) : null;
+  return `<tr>
+    <td style="font-weight:500">${u.username}</td>
+    <td>${u.nickname||'-'}</td>
+    <td>${u.boundTo ? `<span class="tag tag-success">已绑定 ${partner?partner.username:''}</span>` : '<span class="tag tag-gray">未绑定</span>'}</td>
+    <td>${u.disabled ? '<span class="tag tag-error">已禁用</span>' : '<span class="tag tag-success">正常</span>'}</td>
+    <td style="font-size:12px;color:var(--text-faint)">${formatDate(u.createdAt)}</td>
+    <td style="font-size:12px;color:var(--text-faint)">${u.lastLogin?formatDate(u.lastLogin):'-'}</td>
+    <td>
+      <button class="btn btn-ghost btn-sm" onclick="toggleUserDisable('${u.username}')">${u.disabled?'启用':'禁用'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="resetUserPassword('${u.username}')">重置密码</button>
+      ${u.boundTo?`<button class="btn btn-ghost btn-sm" onclick="unbindUser('${u.username}')">解绑</button>`:''}
+    </td>
+  </tr>`;
+}
+function filterUsers(keyword) {
+  const users = STORE.get('cj_users') || {};
+  const list = Object.values(users).filter(u => u.username.includes(keyword) || (u.nickname||'').includes(keyword));
+  document.getElementById('userTableBody').innerHTML = list.map(u => renderUserRow(u)).join('') || '<tr><td colspan="7"><div class="empty"><h4>无匹配用户</h4></div></td></tr>';
+}
+function toggleUserDisable(username) {
+  const users = STORE.get('cj_users') || {};
+  if (!users[username]) return;
+  users[username].disabled = !users[username].disabled;
+  STORE.set('cj_users', users);
+  addLog('用户', (users[username].disabled?'禁用':'启用') + '用户：' + username);
+  renderUsers(document.getElementById('pageContent'));
+  showToast('操作成功');
+}
+function resetUserPassword(username) {
+  const newPw = prompt('为用户 ' + username + ' 设置新密码（至少8位，含大小写字母和数字）：');
+  if (!newPw) return;
+  if (newPw.length < 8 || !/[a-z]/.test(newPw) || !/[A-Z]/.test(newPw) || !/\d/.test(newPw)) {
+    showToast('密码不符合强度要求', 'error'); return;
+  }
+  const users = STORE.get('cj_users') || {};
+  if (!users[username]) return;
+  users[username].passwordHash = 'h_' + Math.abs((()=>{let h=0;const s=newPw+'_cj_salt_2024';for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}return h;})()).toString(36) + '_' + btoa(unescape(encodeURIComponent(newPw.slice(0,4))));
+  STORE.set('cj_users', users);
+  addLog('用户', '重置用户密码：' + username);
+  showToast('密码已重置', 'success');
+}
+function unbindUser(username) {
+  if (!confirm('确定解除该用户的绑定关系吗？')) return;
+  const users = STORE.get('cj_users') || {};
+  const u = users[username];
+  if (!u || !u.boundTo) return;
+  const partner = Object.values(users).find(x => x.id === u.boundTo);
+  u.boundTo = null;
+  if (partner) partner.boundTo = null;
+  STORE.set('cj_users', users);
+  addLog('用户', '解除绑定：' + username + (partner?' 与 '+partner.username:''));
+  renderUsers(document.getElementById('pageContent'));
+  showToast('已解除绑定');
+}
+
+/* ===== 系统设置 ===== */
+function getSettings() {
+  return STORE.get(STORE.settings) || {
+    siteName:'此间', allowRegister:true, aiEnabled:true,
+    inviteExpireDays:30, messageRetentionDays:365,
+    autoLeaveMinutes:2, maxInviteUses:1
+  };
+}
+function renderSettings(el) {
+  const s = getSettings();
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-header"><h3>基础设置</h3></div>
+      <div class="card-body">
+        <div class="form-row"><label class="label">站点名称</label><input class="input" id="setSiteName" value="${s.siteName||''}"></div>
+        <div class="form-row">
+          <label class="label">开放注册</label>
+          <div style="display:flex;align-items:center;gap:10px"><div class="switch ${s.allowRegister?'on':''}" id="setAllowRegister" onclick="this.classList.toggle('on')"></div><span style="font-size:13px;color:var(--text-soft)">关闭后新用户无法注册</span></div>
+        </div>
+        <div class="form-row">
+          <label class="label">启用 AI 服务</label>
+          <div style="display:flex;align-items:center;gap:10px"><div class="switch ${s.aiEnabled?'on':''}" id="setAiEnabled" onclick="this.classList.toggle('on')"></div><span style="font-size:13px;color:var(--text-soft)">全局停用后所有 AI 助手功能将不可用</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>邀请码与数据</h3></div>
+      <div class="card-body">
+        <div class="form-row"><label class="label">邀请码有效期（天）</label><input class="input" type="number" id="setInviteExpire" value="${s.inviteExpireDays}" min="1"></div>
+        <div class="form-row"><label class="label">消息保留时长（天）</label><input class="input" type="number" id="setMsgRetention" value="${s.messageRetentionDays}" min="7"></div>
+        <div class="form-row"><label class="label">自动离开接待（分钟）</label><input class="input" type="number" id="setAutoLeave" value="${s.autoLeaveMinutes}" min="1"></div>
+      </div>
+    </div>
+    <div style="text-align:right"><button class="btn btn-primary" onclick="saveSettings()">保存设置</button></div>
+  `;
+}
+function saveSettings() {
+  const s = {
+    siteName: document.getElementById('setSiteName').value.trim() || '此间',
+    allowRegister: document.getElementById('setAllowRegister').classList.contains('on'),
+    aiEnabled: document.getElementById('setAiEnabled').classList.contains('on'),
+    inviteExpireDays: parseInt(document.getElementById('setInviteExpire').value) || 30,
+    messageRetentionDays: parseInt(document.getElementById('setMsgRetention').value) || 365,
+    autoLeaveMinutes: parseInt(document.getElementById('setAutoLeave').value) || 2,
+    maxInviteUses: 1
+  };
+  STORE.set(STORE.settings, s);
+  addLog('设置', '保存系统设置');
+  showToast('设置已保存', 'success');
+}
+
+/* ===== 操作日志 ===== */
+function renderLogs(el) {
+  const logs = STORE.get(STORE.logs) || [];
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-header"><h3>操作日志（${logs.length}）</h3><button class="btn btn-ghost btn-sm" onclick="clearLogs()">清空日志</button></div>
+      <div class="card-body" style="padding:0;max-height:600px;overflow-y:auto">
+        ${logs.length === 0 ? '<div class="empty"><h4>暂无操作记录</h4></div>' :
+          logs.slice().reverse().map(log => `<div class="log-item"><span class="log-time">${formatTime(log.time)}</span><span class="log-action">${log.action}</span><span class="log-detail">${log.detail}</span><span style="font-size:12px;color:var(--text-faint)">${log.admin||'system'}</span></div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+function addLog(action, detail) {
+  const logs = STORE.get(STORE.logs) || [];
+  const session = STORE.get(STORE.adminSession);
+  logs.push({ time:new Date().toISOString(), action, detail, admin:session?session.username:'system' });
+  if (logs.length > 500) logs.splice(0, logs.length - 500);
+  STORE.set(STORE.logs, logs);
+}
+function clearLogs() {
+  if (!confirm('确定清空所有操作日志吗？')) return;
+  STORE.set(STORE.logs, []);
+  renderLogs(document.getElementById('pageContent'));
+  showToast('日志已清空');
+}
+
+/* ===== 修改管理员密码 ===== */
+function changeAdminPassword() {
+  document.getElementById('adminOldPw').value = '';
+  document.getElementById('adminNewPw').value = '';
+  document.getElementById('adminConfirmPw').value = '';
+  openModal('changePwModal');
+}
+function submitAdminPw() {
+  const oldPw = document.getElementById('adminOldPw').value;
+  const newPw = document.getElementById('adminNewPw').value;
+  const confirmPw = document.getElementById('adminConfirmPw').value;
+  const admin = STORE.get(STORE.admin);
+  if (hashPw(oldPw) !== admin.passwordHash) { showToast('当前密码错误', 'error'); return; }
+  if (newPw.length < 8 || !/[a-z]/.test(newPw) || !/[A-Z]/.test(newPw) || !/\d/.test(newPw)) {
+    showToast('新密码需至少8位，含大小写字母和数字', 'error'); return;
+  }
+  if (newPw !== confirmPw) { showToast('两次输入的新密码不一致', 'error'); return; }
+  admin.passwordHash = hashPw(newPw);
+  admin.mustChangePassword = false;
+  STORE.set(STORE.admin, admin);
+  addLog('安全', '修改管理员密码');
+  closeModal('changePwModal');
+  showToast('密码修改成功', 'success');
+}
+
+/* ===== 工具函数 ===== */
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('show'); }));
+let toastTimer;
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show ' + (type||'');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+function formatDate(iso) { if (!iso) return '-'; const d = new Date(iso); return d.toLocaleDateString('zh-CN'); }
+function formatTime(iso) { if (!iso) return '-'; const d = new Date(iso); return d.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+
+/* ===== 启动 ===== */
+checkAuth();
+</script>
+</body>
+</html>
