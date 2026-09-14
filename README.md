@@ -37,3 +37,7 @@ AI 默认走 OpenAI 的 Chat Completions 与 Images API（generations / edits）
 - 特效首版提供静态图片修改，不包含动态视频特效。
 
 接口参考：https://developers.openai.com/api/docs/guides/image-generation
+
+## 当前示例
+
+2026-09-14 全部重写为美好共同经历：第一次一起看海、生日藏花的惊喜、搬进新家的晨光；每篇都有双方片段和全新配图。旧版原始演示内容不再展示或自动迁入。完整内容匹配用于清理旧示例，用户修改过的记录保留。

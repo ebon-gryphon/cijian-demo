@@ -49,6 +49,7 @@ import {
   restoreLegacyPictures,
 } from './journal-storage';
 import './journal.css';
+import { isRetiredExample, withoutRetiredExamples } from './retired-examples';
 type Session = {
   member: { id: string; spaceId: string; displayName: string; role: Person };
   partner: { displayName: string; role: Person } | null;
@@ -189,8 +190,16 @@ export default function Home() {
     mounted.current = true;
     void (async () => {
       try {
-        const saved = (await localRead<Entry[]>('entries')) || [];
-        const prior = await localRead<Entry>('draft');
+        const previous = (await localRead<Entry[]>('entries')) || [];
+        const saved = await withoutRetiredExamples(previous);
+        if (saved.length !== previous.length)
+          await localWrite('entries', saved);
+        const oldDraft = await localRead<Entry>('draft');
+        const prior =
+          oldDraft && !(await isRetiredExample(oldDraft))
+            ? oldDraft
+            : undefined;
+        if (oldDraft && !prior) await localWrite('draft', newEntry());
         const mode = await localRead<boolean>('localMode');
         let migrated: Entry[] = [];
         if (!(await localRead<boolean>('legacyMigrated'))) {
@@ -204,6 +213,7 @@ export default function Home() {
                 localStorage.getItem('between-us-demo-v1'),
               ),
             );
+            migrated = await withoutRetiredExamples(migrated);
             migrated = await restoreLegacyPictures(
               migrated,
               localStorage.getItem('between-us-demo-v1'),
@@ -825,7 +835,7 @@ export default function Home() {
                         }
                         placeholder={
                           p === role
-                            ? '比如，周末下雨，一起煮面，面有点糊了，但我们笑了很久。'
+                            ? '比如，第一次一起看海，牵手踩浪花，拍下了我们的影子。'
                             : paired
                               ? '等对方来补充，也可以先写成故事。'
                               : '切换到另一人的视角，补上这一天。'
@@ -833,20 +843,22 @@ export default function Home() {
                       />
                       {p === role && !draft.notes[p] && (
                         <div className="fragment-example">
-                          {['一次约会', '平凡的小事', '想念的瞬间'].map((s) => (
-                            <button
-                              className="chip"
-                              key={s}
-                              disabled={!!busy}
-                              onClick={() =>
-                                patch({
-                                  notes: { ...draft.notes, [p]: s + '，' },
-                                })
-                              }
-                            >
-                              {s}
-                            </button>
-                          ))}
+                          {['一起去旅行', '被记得的小惊喜', '我们的纪念日'].map(
+                            (s) => (
+                              <button
+                                className="chip"
+                                key={s}
+                                disabled={!!busy}
+                                onClick={() =>
+                                  patch({
+                                    notes: { ...draft.notes, [p]: s + '，' },
+                                  })
+                                }
+                              >
+                                {s}
+                              </button>
+                            ),
+                          )}
                         </div>
                       )}
                       {p === 'guest' && !paired && (
@@ -960,18 +972,19 @@ export default function Home() {
                   {!draft.story && !draft.title ? (
                     <div className="paper-empty">
                       <p className="quote">
-                        那些很小的事，
+                        那些想起就会笑的事，
                         <br />
-                        也值得有一页。
+                        一起记下来。
                       </p>
                       <p>从左边的几句话开始，或自己写下故事。</p>
                       <figure className="sample-peek">
                         <img
-                          src="/memories/rainy-noodles.jpg"
-                          alt="雨天面馆里两个人的面碗，示例配图"
+                          src={examples[0].pictures[0].src}
+                          alt="两个人在晴朗海边牵手踩浪花，示例配图"
                         />
                         <figcaption>
-                          雨没停，面已经吃完了<small>示例 · AI 配图</small>
+                          {examples[0].title}
+                          <small>示例 · AI 配图</small>
                         </figcaption>
                       </figure>
                       <div className="empty-try">
@@ -1591,7 +1604,7 @@ export default function Home() {
                             }))
                           }
                           maxLength={1000}
-                          placeholder="比如，两人坐在面馆窗边，窗外下着雨"
+                          placeholder="比如，第一次看海时，我们牵着手走向小浪花"
                         />
                       </label>
                       {imageDraft.source && (

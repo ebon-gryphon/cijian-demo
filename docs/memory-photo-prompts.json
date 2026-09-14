@@ -1,5 +1,23 @@
 [
-  "Use case: photorealistic-natural. Asset type: landscape photograph for a fictional Chinese couple's shared memory album demo. A candid intimate tabletop photo of two bowls of steaming Chinese noodle soup and two pairs of chopsticks in a small Hangzhou neighborhood noodle shop, rain droplets on the window, out-of-focus warm street lights beyond, two adults' hands subtly visible at opposite edges. Natural 35mm film photograph, tasteful warm amber with deep green shadows, authentic everyday romance, beautiful soft window light, appetizing real food, gently imperfect personal snapshot rather than advertising. Landscape 3:2 composition. No text, no watermark, no collage, no frames.",
-  "Use case: photorealistic-natural. Asset type: landscape photograph for a fictional Chinese couple's shared memory album demo. Two adult East Asian lovers around 25 years old seen from behind walking hand in hand along a quiet Hangzhou West Lake waterside path in late afternoon, woman in simple ivory cardigan with shoulder-length dark hair, man in faded blue shirt with short dark hair, willow leaves at the edge, soft lake reflections and small distant boats. Natural candid 35mm film photo, understated romantic mood, warm sunlight and rich soft greens, believable private travel memory, no posed wedding style. Landscape 3:2 composition. No text, no watermark, no collage, no frames.",
-  "Use case: photorealistic-natural. Asset type: landscape photograph for a fictional Chinese couple's shared memory album demo. Quiet weekend breakfast for two in a small bright apartment, two mismatched ceramic coffee mugs, two plates of toast and eggs, a small glass vase of white daisies, open linen curtain, sunlight across a wooden table, a subtle glimpse of two adult hands reaching for mugs from opposite sides. Candid personal 35mm film photograph, natural food and textures, gentle warm cream and honey tones, cozy authentic everyday romance, tastefully composed but not commercial. Landscape 3:2 composition. No text, no watermark, no collage, no frames."
+  {
+    "title": "第一次一起看海",
+    "file": "/memories/first-sea.jpg",
+    "brief": "晴朗清透的海边，两位成年东亚伴侣背对镜头赤脚牵手，白色小浪花漫过脚踝，明亮自然的胶片摄影，轻松快乐，横幅构图，无文字",
+    "source": "内置 imagegen 生成的虚构示例配图",
+    "date": "2026-09-14"
+  },
+  {
+    "title": "生日那晚，你把花藏在身后",
+    "file": "/memories/birthday-flowers.jpg",
+    "brief": "温馨明亮的家中生日夜，两位成年东亚伴侣，一人把藏在身后的粉杏色鲜花递给另一人，小水果蛋糕上有烛光，真实欣喜的瞬间，自然胶片摄影，无文字，横幅构图",
+    "source": "内置 imagegen 生成的虚构示例配图",
+    "date": "2026-09-14"
+  },
+  {
+    "title": "搬进新家的第一束阳光",
+    "file": "/memories/first-home.jpg",
+    "brief": "明亮的新家，两位成年东亚伴侣并排坐在木地板上，窗边有刚摆好的绿植，旁边几只搬家纸箱，柔和金色晨光，轻松满足，真实生活胶片摄影，横幅构图，无文字",
+    "source": "内置 imagegen 生成的虚构示例配图",
+    "date": "2026-09-14"
+  }
 ]

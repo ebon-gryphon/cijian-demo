@@ -61,7 +61,7 @@ assert.equal(
 await page.getByRole('button', { name: 'Close', exact: true }).click();
 await page
   .locator('input[type=file]')
-  .setInputFiles('public/memories/rainy-noodles.jpg');
+  .setInputFiles('public/memories/first-sea.jpg');
 await page.getByRole('button', { name: '改图', exact: true }).waitFor();
 await page.getByRole('button', { name: '改图', exact: true }).click();
 await page

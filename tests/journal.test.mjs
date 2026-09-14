@@ -6,7 +6,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const dir = await mkdtemp(join(tmpdir(), 'cijian-test-'));
 await build({
-  entryPoints: ['app/journal-model.ts', 'app/journal-ai.ts'],
+  entryPoints: [
+    'app/journal-model.ts',
+    'app/journal-ai.ts',
+    'app/retired-examples.ts',
+  ],
   outdir: dir,
   bundle: true,
   format: 'esm',
@@ -148,4 +152,38 @@ test('image editing sends original bytes and chosen prompt to edits API', async 
   assert.equal(await body.get('image[]').text(), 'hello');
   assert.equal(body.get('size'), '1024x1024');
   assert.equal(result.image, 'data:image/jpeg;base64,aW1hZ2U=');
+});
+
+const { isRetiredExample, withoutRetiredExamples } = await import(
+  join(dir, 'retired-examples.mjs')
+);
+test('retire untouched examples, retain changes to text, notes, or uploaded pictures', async () => {
+  const old = {
+    ...newEntry(),
+    id: 'shared-time',
+    title: '今天的忙碌时间',
+    story: '今天开会到 18:30，结束后会看消息。',
+    notes: { host: '', guest: '今天开会到 18:30，结束后会看消息。' },
+  };
+  assert.equal(await isRetiredExample(old), true);
+  const edited = { ...old, story: old.story + '晚上我们一起庆祝生日。' };
+  const ownNotes = {
+    ...old,
+    notes: { host: '我补写的记忆', guest: old.notes.guest },
+  };
+  const ownPhoto = {
+    ...old,
+    pictures: [
+      {
+        id: 'own',
+        src: 'data:image/jpeg;base64,custom',
+        kind: 'uploaded',
+        prompt: '',
+      },
+    ],
+  };
+  assert.deepEqual(
+    await withoutRetiredExamples([old, edited, ownNotes, ownPhoto]),
+    [edited, ownNotes, ownPhoto],
+  );
 });

@@ -7,6 +7,7 @@ import {
   sameOrigin,
 } from '@/app/beta-server';
 import { validateEntry, type Entry } from '@/app/journal-model';
+import { withoutRetiredExamples } from '@/app/retired-examples';
 const headers = { 'Cache-Control': 'no-store' };
 export async function GET(request: Request) {
   try {
@@ -19,11 +20,13 @@ export async function GET(request: Request) {
       .all<{ content: string; revision: number; updated_at: number }>();
     return Response.json(
       {
-        entries: rows.results.map((r) => ({
-          ...JSON.parse(r.content),
-          revision: r.revision,
-          updatedAt: r.updated_at,
-        })),
+        entries: await withoutRetiredExamples(
+          rows.results.map((r) => ({
+            ...JSON.parse(r.content),
+            revision: r.revision,
+            updatedAt: r.updated_at,
+          })),
+        ),
       },
       { headers },
     );

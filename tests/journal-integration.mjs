@@ -84,7 +84,7 @@ const missingAI = await call('/api/diary/ai', {
 assert.equal(missingAI.status, 503);
 assert.match(missingAI.body.error, /设置/);
 const imageBytes = await (
-  await fetch(base + '/memories/rainy-noodles.jpg')
+  await fetch(base + '/memories/first-sea.jpg')
 ).arrayBuffer();
 const data =
   'data:image/jpeg;base64,' + Buffer.from(imageBytes).toString('base64');

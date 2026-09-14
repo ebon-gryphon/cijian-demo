@@ -9,7 +9,7 @@ const cssFiles=(await readdir(assets)).filter(f=>f.endsWith('.css'));
 if(!cssFiles.length)throw new Error('Build the application before producing the offline demo.');
 const css=(await Promise.all(cssFiles.map(f=>readFile(path.join(assets,f),'utf8')))).join('\n');
 let js=outputFiles[0].text.replace(/<\/script/gi,'<\\/script');
-for (const filename of ['rainy-noodles.jpg', 'west-lake.jpg', 'weekend-breakfast.jpg']) {
+for (const filename of ['first-sea.jpg', 'birthday-flowers.jpg', 'first-home.jpg', 'rainy-noodles.jpg', 'west-lake.jpg', 'weekend-breakfast.jpg']) {
   const bytes = await readFile(path.join(root, 'public/memories', filename));
   js = js.replaceAll('/memories/' + filename, 'data:image/jpeg;base64,' + bytes.toString('base64'));
 }

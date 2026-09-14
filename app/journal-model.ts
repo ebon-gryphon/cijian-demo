@@ -41,22 +41,24 @@ export function newEntry(): Entry {
 }
 export const examples: Entry[] = [
   {
-    id: 'example-rain',
+    id: 'example-first-sea',
     date: '2026-09-12',
-    title: '雨没停，面已经吃完了',
+    title: '第一次一起看海',
     story:
-      '雨下得突然，我们躲进了街边的一家面馆。\n\n面端上来，你把碗里的青菜分给了我。外面的雨一直没停，我们慢慢吃完了这一顿。\n\n你说，下次晴天也来。我记住了这句话，也记住了这顿饭。',
+      '从木栈道走到沙滩上，海一下子铺满了眼前。你把两双鞋拎在手里，我拉着你往水边走。第一朵小浪花漫过脚背时，我们同时缩了一下脚，又笑着往前迈了一步。\n\n你拿出手机，拍下我们牵着手的影子。后来翻照片，最喜欢的还是这一张，脸没有入镜，手却牵得很紧。\n\n回去的路上，我们买了两支冰淇淋。你问下次还来不来，我已经开始查下一个晴天。',
     notes: {
-      host: '周末，下雨，躲进面馆。我把青菜分给了你。',
-      guest: '我说，下次晴天也来。',
+      host: '第一次一起看海，赤脚踩小浪花，牵手拍影子，回去买了冰淇淋。我开始查下一个晴天。',
+      guest:
+        '我拎着两双鞋，被海水碰到时和你一起缩脚笑了。拍了牵手的影子，问你下次还来不来。',
     },
     mode: 'faithful',
     pictures: [
       {
-        id: 'rain',
-        src: '/memories/rainy-noodles.jpg',
+        id: 'example-first-sea-photo',
+        src: '/memories/first-sea.jpg',
         kind: 'generated',
-        prompt: '雨天面馆，两个人的一顿热面，温暖的胶片摄影',
+        prompt:
+          '晴朗清透的海边，两位成年东亚伴侣背对镜头赤脚牵手，白色小浪花漫过脚踝，明亮自然的胶片摄影，轻松快乐，横幅构图，无文字',
       },
     ],
     references: [],
@@ -65,22 +67,24 @@ export const examples: Entry[] = [
     sample: true,
   },
   {
-    id: 'example-lake',
-    date: '2026-09-06',
-    title: '再走五分钟，就到日落了',
+    id: 'example-birthday-flowers',
+    date: '2026-09-05',
+    title: '生日那晚，你把花藏在身后',
     story:
-      '你说再走五分钟，结果我们在湖边走了一个小时。回来的路上，鞋子里都是小石子。\n\n后来你告诉我，其实是不想那么早回去。那天的风很好，我们也笑了好久。',
+      '进门时，你一只手扶着门，另一只手背在身后。我还没来得及问，花就递到了面前，是我上个月路过花店时多看了几眼的那一种。\n\n桌上摆着小蛋糕，草莓围了一圈。你点好蜡烛，坐在对面唱生日歌，唱完还认真地看着我，等我许愿。\n\n切蛋糕时，我把最大的一颗草莓放进你的盘子。我们把花插好，又挨在一起拍了张照片。照片里的我抱着花，你肩上靠着我的脑袋。',
     notes: {
-      host: '湖边散步，说好五分钟，走了一个小时。',
-      guest: '不想那么早回去。风很好。',
+      host: '生日，你送了我上个月在花店喜欢的花。小蛋糕围了一圈草莓，我把最大的给你。抱着花靠在你肩上合照。',
+      guest:
+        '进门时把花藏在身后。点蜡烛唱生日歌，等你许愿。一起插花、拍了合照。',
     },
     mode: 'faithful',
     pictures: [
       {
-        id: 'lake',
-        src: '/memories/west-lake.jpg',
+        id: 'example-birthday-flowers-photo',
+        src: '/memories/birthday-flowers.jpg',
         kind: 'generated',
-        prompt: '湖边日落，温暖的纪实摄影',
+        prompt:
+          '温馨明亮的家中生日夜，两位成年东亚伴侣，一人把藏在身后的粉杏色鲜花递给另一人，小水果蛋糕上有烛光，真实欣喜的瞬间，自然胶片摄影，无文字，横幅构图',
       },
     ],
     references: [],
@@ -89,19 +93,24 @@ export const examples: Entry[] = [
     sample: true,
   },
   {
-    id: 'example-breakfast',
-    date: '2026-08-30',
-    title: '把早晨过得慢一点',
+    id: 'example-first-home',
+    date: '2026-08-29',
+    title: '搬进新家的第一束阳光',
     story:
-      '今天没有定闹钟。吐司烤得有一点焦，但你煮的咖啡刚刚好。\n\n我们想把这样的周末再过好多次。',
-    notes: { host: '周末，没有闹钟，烤焦一点的吐司，你煮的咖啡。', guest: '' },
+      '最后一只纸箱搬进来，我们关上门，先在地板上并排坐了一会儿。窗边的阳光正好落在脚边。你伸出手，我把钥匙放进你掌心，两把钥匙轻轻碰了一下。\n\n我们最先拆开的，是一起挑的那盆绿植。你把它放在窗边，我往旁边挪了挪，给它留出晒太阳的位置。\n\n屋里还空着，声音听起来都有一点回响。你试着喊了一声“我回来了”，我马上接上“欢迎回家”。我们坐在纸箱旁边，笑了好久。',
+    notes: {
+      host: '今天搬进新家，并排坐在地板上晒太阳，把两把钥匙碰了一下。先拆了一起挑的绿植。你喊我回来了，我接欢迎回家。',
+      guest:
+        '新家的阳光照在脚边。我把绿植放到窗边，试着喊我回来了，我们笑了好久。',
+    },
     mode: 'faithful',
     pictures: [
       {
-        id: 'breakfast',
-        src: '/memories/weekend-breakfast.jpg',
+        id: 'example-first-home-photo',
+        src: '/memories/first-home.jpg',
         kind: 'generated',
-        prompt: '周末双人早餐，柔和自然光',
+        prompt:
+          '明亮的新家，两位成年东亚伴侣并排坐在木地板上，窗边有刚摆好的绿植，旁边几只搬家纸箱，柔和金色晨光，轻松满足，真实生活胶片摄影，横幅构图，无文字',
       },
     ],
     references: [],
