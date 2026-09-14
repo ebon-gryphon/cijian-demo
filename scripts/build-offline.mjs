@@ -3,7 +3,7 @@ import {readFile,writeFile,readdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const {outputFiles}=await build({entryPoints:[path.join(root,'app/offline-entry.tsx')],bundle:true,minify:true,write:false,format:'iife',platform:'browser',jsx:'automatic',target:['es2022'],tsconfig:path.join(root,'tsconfig.json'),define:{'process.env.NODE_ENV':'"production"'}});
+const {outputFiles}=await build({entryPoints:[path.join(root,'app/offline-entry.tsx')],bundle:true,minify:true,write:false,outfile:path.join(root,'offline.js'),format:'iife',platform:'browser',jsx:'automatic',target:['es2022'],tsconfig:path.join(root,'tsconfig.json'),define:{'process.env.NODE_ENV':'"production"'}});
 const assets=path.join(root,'dist/client/_next/static/css');
 const cssFiles=(await readdir(assets)).filter(f=>f.endsWith('.css'));
 if(!cssFiles.length)throw new Error('Build the application before producing the offline demo.');
@@ -13,6 +13,6 @@ for (const filename of ['rainy-noodles.jpg', 'west-lake.jpg', 'weekend-breakfast
   const bytes = await readFile(path.join(root, 'public/memories', filename));
   js = js.replaceAll('/memories/' + filename, 'data:image/jpeg;base64,' + bytes.toString('base64'));
 }
-const html='<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>此间 · 我们的关系空间</title><meta name="description" content="双人认知与关系陪伴的本机交互 Demo"><style>'+css+'</style></head><body><div id="root"></div><script>'+js+'</script></body></html>';
+const html='<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>此间 · 我们的双人日记</title><meta name="description" content="双人日记、故事编辑与共同记忆的离线体验"><style>'+css+'</style></head><body><div id="root"></div><script>'+js+'</script></body></html>';
 await writeFile(path.join(root,'打开此间.html'),html,'utf8');
 console.log('Offline demo generated: 打开此间.html');

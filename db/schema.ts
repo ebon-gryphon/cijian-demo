@@ -79,3 +79,32 @@ export const messages = sqliteTable(
     index('idx_messages_space_created').on(table.spaceId, table.createdAt),
   ],
 );
+
+export const diaries = sqliteTable(
+  'diaries',
+  {
+    id: text('id').notNull(),
+    spaceId: text('space_id')
+      .notNull()
+      .references(() => spaces.id),
+    content: text('content').notNull(),
+    revision: integer('revision').notNull().default(1),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_diaries_space_id').on(table.spaceId, table.id),
+    index('idx_diaries_space_updated').on(table.spaceId, table.updatedAt),
+  ],
+);
+export const diaryAssets = sqliteTable(
+  'diary_assets',
+  {
+    id: text('id').primaryKey(),
+    spaceId: text('space_id')
+      .notNull()
+      .references(() => spaces.id),
+    mime: text('mime').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [index('idx_diary_assets_space').on(table.spaceId)],
+);

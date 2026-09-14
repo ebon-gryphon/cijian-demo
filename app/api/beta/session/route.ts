@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     const displayName = cleanDisplayName(body?.displayName);
     if (displayName.length < 1) throw new BetaError('请输入你的称呼');
     if (action !== 'create' && action !== 'join')
-      throw new BetaError('请选择创建或加入测试空间');
+      throw new BetaError('请选择创建或加入双人日记');
 
     const db = getD1();
     const now = Date.now();
@@ -89,13 +89,13 @@ export async function POST(request: Request) {
         .prepare('SELECT id FROM spaces WHERE invite_code = ?')
         .bind(inviteCode)
         .first<{ id: string }>();
-      if (!space) throw new BetaError('没有找到这个测试空间', 404);
+      if (!space) throw new BetaError('没有找到这个双人日记', 404);
       const count = await db
         .prepare('SELECT COUNT(*) AS total FROM members WHERE space_id = ?')
         .bind(space.id)
         .first<{ total: number }>();
       if ((count?.total ?? 0) >= 2)
-        throw new BetaError('这个测试空间已经有两个人了', 409);
+        throw new BetaError('这个双人日记已经有两个人了', 409);
       const memberId = crypto.randomUUID();
       await db
         .prepare(
@@ -119,35 +119,13 @@ export async function POST(request: Request) {
 
     return Response.json(
       { token, ...(await sessionPayload(member)) },
-      { status: 201, headers },
-    );
-  } catch (error) {
-    return betaErrorResponse(error);
-  }
-}
-
-export async function PATCH(request: Request) {
-  try {
-    if (!sameOrigin(request)) throw new BetaError('不支持跨站请求', 403);
-    const member = await requireMember(request);
-    const body = (await readJson(request)) as Record<string, unknown>;
-    const receptionEnabled =
-      typeof body.receptionEnabled === 'boolean'
-        ? body.receptionEnabled
-        : member.receptionEnabled;
-    const manualBusy =
-      typeof body.manualBusy === 'boolean'
-        ? body.manualBusy
-        : member.manualBusy;
-    await getD1()
-      .prepare(
-        'UPDATE members SET reception_enabled = ?, manual_busy = ?, last_seen_at = ? WHERE id = ?',
-      )
-      .bind(Number(receptionEnabled), Number(manualBusy), Date.now(), member.id)
-      .run();
-    return Response.json(
-      await sessionPayload({ ...member, receptionEnabled, manualBusy }),
-      { headers },
+      {
+        status: 201,
+        headers: {
+          ...headers,
+          'Set-Cookie': `cijian_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}`,
+        },
+      },
     );
   } catch (error) {
     return betaErrorResponse(error);

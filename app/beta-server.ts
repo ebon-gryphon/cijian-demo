@@ -108,6 +108,11 @@ export class BetaError extends Error {
 
 export function betaErrorResponse(error: unknown) {
   const status = error instanceof BetaError ? error.status : 500;
+  if (!(error instanceof BetaError))
+    console.error(
+      'Diary storage error',
+      error instanceof Error ? error.message : 'unknown',
+    );
   const message =
     error instanceof BetaError ? error.message : '服务暂时不可用，请稍后重试';
   return Response.json(
@@ -120,9 +125,11 @@ export async function requireMember(request: Request): Promise<BetaMember> {
   const authorization = request.headers.get('authorization') ?? '';
   const token = authorization.startsWith('Bearer ')
     ? authorization.slice(7).trim()
-    : '';
+    : (request.headers
+        .get('cookie')
+        ?.match(/(?:^|; )cijian_session=([a-f0-9]{64})(?:;|$)/)?.[1] ?? '');
   if (!/^[a-f0-9]{64}$/.test(token))
-    throw new BetaError('请重新进入测试空间', 401);
+    throw new BetaError('请重新进入双人日记', 401);
   const tokenHash = await hashToken(token);
   const member = await getD1()
     .prepare(
@@ -133,7 +140,7 @@ export async function requireMember(request: Request): Promise<BetaMember> {
     )
     .bind(tokenHash)
     .first<BetaMember>();
-  if (!member) throw new BetaError('测试身份已经失效，请重新进入', 401);
+  if (!member) throw new BetaError('日记身份已经失效，请重新进入', 401);
   await getD1()
     .prepare('UPDATE members SET last_seen_at = ? WHERE id = ?')
     .bind(Date.now(), member.id)
@@ -160,7 +167,7 @@ export async function sessionPayload(member: BetaMember) {
     )
     .bind(member.spaceId, member.id)
     .first<Omit<BetaMember, 'spaceId'>>();
-  if (!space) throw new BetaError('测试空间不存在', 404);
+  if (!space) throw new BetaError('双人日记不存在', 404);
   return {
     member,
     space,

@@ -1,65 +1,31 @@
 'use client';
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { flushSync } from 'react-dom';
+/* Native images support authenticated assets and the standalone offline file. */
+/* eslint-disable next/no-img-element */
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  ArrowUp,
-  ArrowUpRight,
-  Heart,
-  MessageCircle,
-  Layers,
   BookHeart,
-  Inbox,
-  Settings2,
+  BookOpen,
+  Feather,
   Sparkles,
-  Clock3,
-  Check,
-  LockKeyhole,
-  ChevronRight,
+  ImagePlus,
+  Settings2,
+  Users,
+  ArrowUpRight,
   Plus,
-  Pencil,
-  ArrowLeftRight,
-  ChevronDown,
-  LogIn,
-  UserRound,
-  Bot,
-  Eye,
-  EyeOff,
-  Paperclip,
-  FileText,
-  Image as ImageIcon,
+  Check,
+  RefreshCw,
+  Upload,
+  Download,
   X,
+  Link2,
+  History,
+  LoaderCircle,
+  PenLine,
+  Cloud,
+  HardDrive,
+  WandSparkles,
 } from 'lucide-react';
-import {
-  SidebarProvider,
-  Sidebar,
-  SidebarHeader,
-  SidebarContent,
-  SidebarFooter,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarTrigger,
-} from '@/components/ui/sidebar';
-import { GuessGameCard } from './guess-game-card';
-import { SpaceCover } from './space-cover';
-import { MemoryFragments } from './memory-fragments';
-import { Switch } from '@/components/ui/switch';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { memoryPhotoUrls } from './memory-photos';
 import {
   Dialog,
   DialogContent,
@@ -67,2357 +33,1798 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import {
-  people,
-  initialMemories,
-  addDemoMemoryPhotos,
-  initialMessages,
-  uid,
-  memoryStatus,
-  canReview,
-  reviewMemory,
-  reviseMemory,
-  assistantName,
-  migrateReplyLinks,
-  unansweredMessages,
-  unansweredLabels,
-  completeHandoff,
+  newEntry,
+  examples,
+  migrateLegacy,
+  migrateSharedMemories,
+  type Entry,
   type Person,
-  type Memory,
-  type MemoryAttachment,
-  type Message,
-} from './demo';
+  type Picture,
+} from './journal-model';
 import {
-  AWAY_DELAY,
-  initialPresence,
-  transitionPresence,
-  presenceStatus,
-  presenceLabel,
-  canReceive,
-  restorePresence,
-  observePresence,
-  type PresenceMap,
-  type PresenceEvent,
-} from './presence';
-import {
-  DEFAULT_MODEL_SETTINGS,
-  MODEL_PROVIDERS,
-  modelDisplayName,
-  modelSettingsIssue,
-  normalizeModelSettings,
-  restoreModelSettings,
-  type ModelProvider,
-  type ModelSettings,
-} from './model-settings';
-import {
-  attachmentIssue,
-  attachmentMetadata,
-  deleteAttachmentBlob,
-  formatFileSize,
-  readAttachmentBlob,
-  saveAttachmentBlob,
-} from './attachments';
-import {
-  restoreStyles,
-  learnMessage,
-  correctStyle,
-  rememberedStyle,
-  styleSummary,
-  type SpeakingStyles,
-} from './speaking-style';
-import {
-  fallbackReply,
-  requestReception,
-  type ReceptionInput,
-} from './reception-model';
-
-type DraftAttachment = MemoryAttachment & { file?: File };
+  localRead,
+  localWrite,
+  readPicture,
+  exportEntries,
+  restoreLegacyPictures,
+} from './journal-storage';
+import './journal.css';
+type Session = {
+  member: { id: string; spaceId: string; displayName: string; role: Person };
+  partner: { displayName: string; role: Person } | null;
+  space: { inviteCode: string };
+};
+type Modal = 'settings' | 'space' | 'image' | 'history' | 'replace' | null;
+type ImageDraft = {
+  step: 1 | 2 | 3;
+  style: string;
+  scene: string;
+  characters: string;
+  size: string;
+  prompt: string;
+  source?: Picture;
+  result: string;
+};
+const imageDefault = (): ImageDraft => ({
+  step: 1,
+  style: '胶片摄影',
+  scene: '',
+  characters: '不特写面部，以背影或手部呈现两个人',
+  size: '1536x1024',
+  prompt: '',
+  result: '',
+});
+function Busy({ children }: { children: ReactNode }) {
+  return (
+    <span className="busy">
+      <LoaderCircle className="spin" size={16} />
+      {children}
+    </span>
+  );
+}
+async function request(path: string, body?: unknown, signal?: AbortSignal) {
+  if (typeof window !== 'undefined' && window.location.protocol === 'file:')
+    throw new Error('离线文件支持本机记录；AI 与双人同步请使用在线预览');
+  const response = await fetch(path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    signal,
+  });
+  let data: Session & {
+    entries: Entry[];
+    entry: Entry;
+    src: string;
+    error?: string;
+    configured: boolean;
+    textModel: string;
+    imageModel: string;
+    title: string;
+    story: string;
+    prompt: string;
+    image: string;
+  };
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error('服务暂时不可用，请稍后再试');
+  }
+  if (!response.ok) throw new Error(data.error || '操作未完成，请重试');
+  return data;
+}
 
 export default function Home() {
-  const [entered, setEntered] = useState(false);
-  const arrival = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (entered) {
-      window.scrollTo({ top: 0, behavior: 'auto' });
-      arrival.current?.focus({ preventScroll: true });
-    }
-  }, [entered]);
-  return entered
-    ? <div className="space-arrival" ref={arrival} tabIndex={-1} aria-label="我们的空间"><OurSpace onExit={() => setEntered(false)} /></div>
-    : <SpaceCover onEnter={() => setEntered(true)} />;
-}
-
-function OurSpace({ onExit }: { onExit: () => void }) {
-  const [view, setView] = useState('chat'),
-    [active, setActive] = useState<Person>('许知夏');
-  const partner: Person = active === '许知夏' ? '林屿' : '许知夏';
-  const [memories, setMemories] = useState<Memory[]>(initialMemories),
-    [messages, setMessages] = useState<Message[]>(initialMessages),
-    [presence, setPresence] = useState<PresenceMap>(initialPresence);
-  const [input, setInput] = useState(''),
-    [reception, setReception] = useState<Record<Person, boolean>>({
-      林屿: true,
-      许知夏: true,
-    }),
-    [notice, setNotice] = useState(''),
-    [loaded, setLoaded] = useState(false),
-    [sourceIds, setSourceIds] = useState<string[] | null>(null);
-  const chatLog = useRef<HTMLDivElement>(null);
-  const chatPositioned = useRef(false);
-  const chatIdentity = useRef<Person | null>(null);
-  const [now, setNow] = useState(0);
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [modelSettings, setModelSettings] = useState<
-    Record<Person, ModelSettings>
-  >(() => restoreModelSettings(null));
-  const [modelDraft, setModelDraft] = useState<ModelSettings>({
-    ...DEFAULT_MODEL_SETTINGS,
-  });
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [styles, setStyles] = useState<SpeakingStyles>(() =>
-    restoreStyles(null),
-  );
-  const [styleMemoryDraft, setStyleMemoryDraft] = useState('');
-  const [editingStyleMemory, setEditingStyleMemory] = useState(false);
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [onboardingStep, setOnboardingStep] = useState(0);
-  const [settingsTab, setSettingsTab] = useState('reception');
-  const [correction, setCorrection] = useState<Message | null>(null);
-  const [correctionText, setCorrectionText] = useState('');
-  const [generating, setGenerating] = useState<Person | null>(null);
-  const inFlight = useRef<{
-    controller: AbortController;
-    person: Person;
-  } | null>(null);
-  function cancelReception() {
-    inFlight.current?.controller.abort();
-    inFlight.current = null;
-    setGenerating(null);
-  }
-  const [reviewing, setReviewing] = useState<Memory | null>(null),
-    [feedback, setFeedback] = useState('');
-  const auto = reception[active];
-  const busy: Record<Person, boolean> = {
-    林屿: canReceive(presence.林屿, true, now),
-    许知夏: canReceive(presence.许知夏, true, now),
-  };
-  function setAuto(enabled: boolean) {
-    if (!enabled && inFlight.current?.person === active) cancelReception();
-    setReception((s) => ({ ...s, [active]: enabled }));
-  }
-  function changePresence(event: PresenceEvent) {
-    const time = Date.now();
-    setPresence((s) => ({
-      ...s,
-      [active]: transitionPresence(s[active], event, time),
-    }));
-    setNow(time);
-  }
-  function takeOver() {
-    if (inFlight.current?.person === active) cancelReception();
-    changePresence('takeover');
-    setNotice('已接回对话');
-  }
-  function switchPerson() {
-    cancelReception();
-    setSettings(false);
-    setCorrection(null);
-    const time = Date.now();
-    setPresence((s) => ({
-      ...s,
-      [active]: transitionPresence(s[active], 'leave', time),
-      [partner]: transitionPresence(s[partner], 'return', time),
-    }));
-    setActive(partner);
-    setNow(time);
-    setInput('');
-    setEditing(null);
-    setReviewing(null);
-    setReplyTo(null);
-    setNotice('已切换到' + partner);
-  }
-  const [editing, setEditing] = useState<Memory | null>(null),
-    [draft, setDraft] = useState(''),
-    [title, setTitle] = useState(''),
-    [subject, setSubject] = useState<Person | '我们'>(active),
-    [filter, setFilter] = useState('all'),
-    [settings, setSettings] = useState(false);
-  const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>(
-      [],
-    ),
-    [savingMemory, setSavingMemory] = useState(false);
-  const [replyTo, setReplyTo] = useState<string | null>(null),
-    [humanReply, setHumanReply] = useState(''),
-    [keywords, setKeywords] = useState('');
-  function openSettings() {
-    setSettingsTab('reception');
-    prepareSettingsDrafts();
-  }
-  function prepareSettingsDrafts() {
-    setModelDraft({ ...modelSettings[active] });
-    setStyleMemoryDraft(rememberedStyle(styles[active]));
-    setEditingStyleMemory(false);
-    setShowApiKey(false);
-    setSettings(true);
-  }
-  function finishOnboarding() {
-    try {
-      localStorage.setItem('between-us-onboarding-v1', 'seen');
-    } catch {}
-    setOnboardingOpen(false);
-    setOnboardingStep(0);
-  }
-  function openOnboarding() {
-    setSettings(false);
-    setOnboardingStep(0);
-    setOnboardingOpen(true);
-  }
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('between-us-demo-v1');
-      if (raw) {
-        const s = JSON.parse(raw);
-        if (Array.isArray(s.memories) && Array.isArray(s.messages)) {
-          setMemories(addDemoMemoryPhotos(s.memories, s.memoryPhotoEdition));
-          setMessages(migrateReplyLinks(s.messages));
-          setPresence(restorePresence(s.presence, s.busy));
-          setReception({
-            林屿: s.reception?.林屿 ?? s.auto ?? true,
-            许知夏: s.reception?.许知夏 ?? s.auto ?? true,
-          });
-          const restoredModels = restoreModelSettings(s.modelSettings);
-          try {
-            const keys = JSON.parse(
-              sessionStorage.getItem('between-us-model-keys') || '{}',
-            );
-            for (const person of people) {
-              if (typeof keys[person] === 'string')
-                restoredModels[person].apiKey = keys[person];
-            }
-          } catch {}
-          setModelSettings(restoredModels);
-          setStyles(restoreStyles(s.speakingStyles));
-          if (people.includes(s.active)) setActive(s.active);
-        }
-      }
-      if (localStorage.getItem('between-us-onboarding-v1') !== 'seen')
-        setOnboardingOpen(true);
-    } catch {}
-    setLoaded(true);
-  }, []);
-  useEffect(() => {
-    if (loaded)
-      try {
-        localStorage.setItem(
-          'between-us-demo-v1',
-          JSON.stringify({
-            memories,
-            memoryPhotoEdition: 1,
-            messages,
-            presence,
-            reception,
-            modelSettings: Object.fromEntries(
-              people.map((p) => [p, { ...modelSettings[p], apiKey: '' }]),
-            ),
-            speakingStyles: styles,
-            active,
-          }),
-        );
-        sessionStorage.setItem(
-          'between-us-model-keys',
-          JSON.stringify(
-            Object.fromEntries(people.map((p) => [p, modelSettings[p].apiKey])),
-          ),
-        );
-      } catch {
-        setNotice('浏览器未允许保存，当前体验仍可继续。');
-      }
-  }, [
-    memories,
-    messages,
-    presence,
-    reception,
-    modelSettings,
-    styles,
-    active,
-    loaded,
-  ]);
-  useEffect(
-    () => () => {
-      inFlight.current?.controller.abort();
-    },
+  const [tab, setTab] = useState('write');
+  const [draft, setDraft] = useState<Entry | null>(null);
+  const [ready, setReady] = useState(false);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [localEntries, setLocalEntries] = useState<Entry[]>([]);
+  const [session, setSession] = useState<Session | null>(null);
+  const [localMode, setLocalMode] = useState(false);
+  const [active, setActive] = useState<Person>('host');
+  const [modal, setModal] = useState<Modal>(null);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [dialogError, setDialogError] = useState('');
+  const [busy, setBusy] = useState('');
+  const [draftStatus, setDraftStatus] = useState('');
+  const [key, setKey] = useState('');
+  const [textModel, setTextModel] = useState('gpt-5-mini');
+  const [imageModel, setImageModel] = useState('gpt-image-2');
+  const [configured, setConfigured] = useState(false);
+  const [imageDraft, setImageDraft] = useState<ImageDraft>(imageDefault);
+  const [history, setHistory] = useState<{ title: string; story: string }[]>(
     [],
   );
-  useEffect(() => {
-    cancelReception();
-  }, [memories]);
-  useEffect(() => {
-    const flight = inFlight.current;
-    if (
-      flight &&
-      !canReceive(presence[flight.person], reception[flight.person], now)
-    )
-      cancelReception();
-  }, [presence, reception, now]);
-  useEffect(() => {
-    if (!loaded) return;
-    function leave() {
-      changePresence('leave');
-    }
-    function back() {
-      if (document.visibilityState === 'hidden') return;
-      changePresence('return');
-    }
-    return observePresence(document, window, leave, back);
-  }, [active, loaded]);
-  useEffect(() => {
-    const time = Date.now();
-    const deadlines = people
-      .map((p) => presence[p])
-      .filter(
-        (p) =>
-          !p.manualBusy &&
-          p.awaySince !== null &&
-          p.awaySince + AWAY_DELAY > time,
-      )
-      .map((p) => p.awaySince! + AWAY_DELAY);
-    if (!deadlines.length) return;
-    const timer = setTimeout(
-      () => setNow(Date.now()),
-      Math.max(0, Math.min(...deadlines) - time) + 5,
-    );
-    return () => clearTimeout(timer);
-  }, [presence, now]);
-  useLayoutEffect(() => {
-    if (view !== 'chat' || !loaded) {
-      chatPositioned.current = false;
-      return;
-    }
-    const log = chatLog.current;
-    if (!log) return;
-    if (!chatPositioned.current || chatIdentity.current !== active) {
-      // Position restored history before paint, without scrolling the page.
-      log.scrollTop = log.scrollHeight;
-    } else {
-      log.scrollTo({ top: log.scrollHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-    }
-    chatPositioned.current = true;
-    chatIdentity.current = active;
-  }, [messages, view, loaded, active, generating]);
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(''), 3500);
-    return () => clearTimeout(t);
-  }, [notice]);
-  async function send(text = input) {
-    const clean = text.trim();
-    if (!clean || !loaded) return;
-    if (inFlight.current?.person === partner) {
-      setNotice('助手正在回复，稍等一下');
-      return;
-    }
-    cancelReception();
-    changePresence('takeover');
-    setInput('');
-    const incomingId = uid();
-    const incoming: Message = {
-      id: incomingId,
-      from: active,
-      text: clean,
-      sources: [],
-      recipient: partner,
-      sentAt: Date.now(),
-    };
-    setMessages((all) => [...all, incoming]);
-    setStyles((all) => learnMessage(all, incoming));
-    if (!canReceive(presence[partner], reception[partner], Date.now())) return;
-    const payload: ReceptionInput = {
-      text: clean,
-      active,
-      partner,
-      memories,
-      messages: [...messages, incoming],
-      style: styles[partner],
-      replyToId: incomingId,
-    };
-    if (
-      !modelSettings[partner].apiKey ||
-      window.location.protocol === 'file:'
-    ) {
-      setMessages((all) => [...all, fallbackReply(payload)]);
-      if (window.location.protocol === 'file:' && modelSettings[partner].apiKey)
-        setNotice('联网模型请在网页版本中使用，离线页面使用基础接待');
-      return;
-    }
-    const controller = new AbortController();
-    inFlight.current = { controller, person: partner };
-    setGenerating(partner);
-    try {
-      const reply = await requestReception(
-        payload,
-        modelSettings[partner],
-        controller.signal,
-      );
-      if (!controller.signal.aborted) setMessages((all) => [...all, reply]);
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        setMessages((all) => [...all, fallbackReply(payload, true)]);
-        setNotice(
-          error instanceof Error
-            ? error.message
-            : '模型暂时无法回复，已使用基础接待',
-        );
+  const [query, setQuery] = useState('');
+  const [showExamples, setShowExamples] = useState(false);
+  const [spaceAction, setSpaceAction] = useState('create');
+  const [displayName, setDisplayName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [pendingEntry, setPendingEntry] = useState<Entry | null>(null);
+  const [conflict, setConflict] = useState<Entry | null>(null);
+  const uploadRef = useRef<HTMLInputElement>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const busyRef = useRef(false);
+  const mounted = useRef(true);
+  const offline =
+    typeof window !== 'undefined' && window.location.protocol === 'file:';
+  const paired = !!session && !localMode;
+  const role = paired ? session.member.role : active;
+  const names: Record<Person, string> = paired
+    ? {
+        host:
+          session.member.role === 'host'
+            ? session.member.displayName
+            : session.partner?.displayName || '对方',
+        guest:
+          session.member.role === 'guest'
+            ? session.member.displayName
+            : session.partner?.displayName || '对方',
       }
-    } finally {
-      if (inFlight.current?.controller === controller) {
-        inFlight.current = null;
-        setGenerating(null);
-      }
-    }
+    : { host: '我', guest: '你' };
+  const stored = localMode ? localEntries : entries;
+  const allMemories = [...stored, ...(!localMode ? localEntries : [])].filter(
+    (e, i, a) => a.findIndex((x) => x.id === e.id) === i,
+  );
+  const hasDraft =
+    !!draft &&
+    (!!draft.title ||
+      !!draft.story ||
+      !!draft.notes.host ||
+      !!draft.notes.guest ||
+      draft.pictures.length > 0);
+  async function refresh() {
+    const [s, e] = await Promise.all([
+      request('/api/beta/session'),
+      request('/api/diary/entries'),
+    ]);
+    setSession(s);
+    setEntries(e.entries);
+    return e.entries as Entry[];
   }
-  const toolState = useRef({
-    active,
-    partner,
-    view,
-    busy,
-    reception,
-    messages,
-    send,
-  });
-  toolState.current = {
-    active,
-    partner,
-    view,
-    busy,
-    reception,
-    messages,
-    send,
-  };
   useEffect(() => {
-    type Tool = {
-      name: string;
-      description: string;
-      inputSchema: object;
-      annotations: { readOnlyHint: boolean; untrustedContentHint: boolean };
-      execute: (input: unknown) => unknown;
-    };
-    const context = (
-      document as Document & {
-        modelContext?: {
-          registerTool: (
-            tool: Tool,
-            options: { signal: AbortSignal },
-          ) => void | Promise<void>;
-        };
-      }
-    ).modelContext;
-    if (!context?.registerTool) return;
-    const lifecycle = new AbortController();
-    const tools: Tool[] = [
-      {
-        name: 'read_relationship_demo',
-        description:
-          'Read the current demo identity, reception state and last 4 demo messages. This is a device-local fictional prototype.',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: () => {
-          const s = toolState.current;
-          return {
-            identity: s.active,
-            partner: s.partner,
-            view: s.view,
-            partnerBusy: s.busy[s.partner],
-            receptionEnabled: s.reception[s.partner],
-            messages: s.messages.slice(-4),
-          };
-        },
-      },
-      {
-        name: 'send_relationship_demo_message',
-        description:
-          'Send a message as the current fictional identity into this local demo. When reception is enabled and the partner is busy, configured model APIs receive conversation context and style samples to generate a reply. Without a key, uses local rules. Never sends to real people.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            text: { type: 'string', minLength: 1, maxLength: 1000 },
-          },
-          required: ['text'],
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: false, untrustedContentHint: true },
-        execute: (input) => {
-          const obj = input as { text?: unknown };
-          if (
-            !obj ||
-            typeof obj.text !== 'string' ||
-            !obj.text.trim() ||
-            obj.text.length > 1000 ||
-            Object.keys(obj).some((k) => k !== 'text')
-          )
-            throw new Error(
-              'text must be a nonempty string of at most 1000 characters',
-            );
-          flushSync(() => {
-            setView('chat');
-            toolState.current.send(obj.text as string);
-          });
-          return { sent: true, messages: toolState.current.messages.slice(-2) };
-        },
-      },
-    ];
-    for (const tool of tools) {
+    mounted.current = true;
+    void (async () => {
       try {
-        Promise.resolve(
-          context.registerTool(tool, { signal: lifecycle.signal }),
-        ).catch(() => {});
-      } catch {}
-    }
-    return () => lifecycle.abort();
-  }, []);
-  const pending = unansweredMessages(messages, active);
-  const currentHandoff = pending.find((item) => item.message.id === replyTo);
-  function changeModelProvider(provider: ModelProvider) {
-    setModelDraft((current) => ({
-      ...current,
-      provider,
-      apiKey: '',
-      model: MODEL_PROVIDERS[provider].defaultModel,
-      baseUrl: '',
-    }));
-  }
-  function saveModelSettings() {
-    const next = normalizeModelSettings(modelDraft);
-    const issue = modelSettingsIssue(next);
-    if (issue) {
-      setNotice(issue);
-      return;
-    }
-    cancelReception();
-    setModelSettings((current) => ({ ...current, [active]: next }));
-    setModelDraft(next);
-    setNotice(`已为${active}保存 ${modelDisplayName(next)}`);
-  }
-  const nav = [
-    { id: 'chat', name: '此刻的我们', icon: MessageCircle },
-    { id: 'perspectives', name: '彼此的模样', icon: Layers },
-    { id: 'memories', name: '共同记忆', icon: BookHeart },
-    { id: 'handoff', name: '待你回应', icon: Inbox },
-  ];
-  function edit(m?: Memory) {
-    setEditing(
-      m || {
-        id: 'new',
-        title: '',
-        text: '',
-        owner: active,
-        subject: active,
-        shared: true,
-        confirmed: false,
-        tags: [],
-      },
-    );
-    setDraft(m?.text || '');
-    setTitle(m?.title || '');
-    setSubject(m?.subject || active);
-    setKeywords(m?.tags.join('、') || '');
-    setDraftAttachments((m?.attachments ?? []).map((item) => ({ ...item })));
-  }
-  function addAttachments(files: FileList | null) {
-    if (!files?.length) return;
-    const next = [...draftAttachments];
-    let issue = '';
-    for (const file of Array.from(files)) {
-      const problem = attachmentIssue(file, next.length);
-      if (problem) {
-        issue ||= problem;
-        continue;
+        const saved = (await localRead<Entry[]>('entries')) || [];
+        const prior = await localRead<Entry>('draft');
+        const mode = await localRead<boolean>('localMode');
+        let migrated: Entry[] = [];
+        if (!(await localRead<boolean>('legacyMigrated'))) {
+          let migrationSucceeded = true;
+          try {
+            migrated = migrateLegacy(
+              localStorage.getItem('cijian-two-person-diary-v1'),
+            );
+            migrated.push(
+              ...migrateSharedMemories(
+                localStorage.getItem('between-us-demo-v1'),
+              ),
+            );
+            migrated = await restoreLegacyPictures(
+              migrated,
+              localStorage.getItem('between-us-demo-v1'),
+            );
+          } catch {
+            migrationSucceeded = false;
+            migrated = [];
+            setError('旧日记暂时无法读取，原始数据仍保留在本机');
+          }
+          await localWrite('entries', [
+            ...saved,
+            ...migrated.filter((e) => !saved.some((x) => x.id === e.id)),
+          ]);
+          if (migrationSucceeded) await localWrite('legacyMigrated', true);
+        }
+        if (!mounted.current) return;
+        setLocalEntries([
+          ...saved,
+          ...migrated.filter((e) => !saved.some((x) => x.id === e.id)),
+        ]);
+        setDraft(prior || newEntry());
+        setLocalMode(offline || !!mode);
+        if (prior) {
+          setDirty(true);
+          setDraftStatus('已恢复本机草稿');
+        }
+        if (migrated.length)
+          setNotice(
+            `已保留 ${migrated.length} 篇旧日记，可在共同记忆中查看并转存`,
+          );
+      } catch {
+        if (mounted.current) {
+          setDraft(newEntry());
+          setError('本机草稿存储不可用，请勿关闭尚未保存的页面');
+        }
+      } finally {
+        if (mounted.current) setReady(true);
       }
-      next.push({ ...attachmentMetadata(file, uid()), file });
+      if (!offline) {
+        try {
+          const s = await request('/api/beta/session');
+          if (mounted.current) {
+            setSession(s);
+            const e = await request('/api/diary/entries');
+            setEntries(e.entries);
+          }
+        } catch {
+          /* No existing room is a normal first visit. */
+        }
+        try {
+          const c = await request('/api/diary/ai');
+          if (mounted.current) {
+            setConfigured(c.configured);
+            setTextModel(c.textModel);
+            setImageModel(c.imageModel);
+          }
+        } catch {
+          /* Manual model connection remains available. */
+        }
+      }
+    })();
+    return () => {
+      mounted.current = false;
+      abortRef.current?.abort();
+    };
+  }, [offline]);
+  useEffect(() => {
+    if (!ready || !draft) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      localWrite('draft', draft)
+        .then(() => {
+          if (mounted.current) setDraftStatus('草稿已保存在本机');
+        })
+        .catch((e) => setError(e.message));
+    }, 450);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [draft, ready]);
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (dirty || busy) {
+        e.preventDefault();
+        // eslint-disable-next-line typescript/no-deprecated -- Required for older browser unload protection.
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty, busy]);
+  function patch(update: Partial<Entry>) {
+    setDirty(true);
+    setDraft((d) => (d ? { ...d, ...update } : d));
+    setConflict(null);
+  }
+  function openModal(m: Modal) {
+    setDialogError('');
+    setModal(m);
+  }
+  async function run(label: string, fn: () => Promise<void>, dialog = false) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(label);
+    if (dialog) setDialogError('');
+    else {
+      setError('');
+      setNotice('');
     }
-    setDraftAttachments(next);
-    if (issue) setNotice(issue);
+    try {
+      await fn();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '操作失败，请重试';
+      if (dialog) setDialogError(msg);
+      else setError(msg);
+    } finally {
+      busyRef.current = false;
+      setBusy('');
+    }
+  }
+  async function ai(body: Record<string, unknown>) {
+    if (!key && !configured) {
+      throw new Error('请先点击右上角 AI 设置，连接模型服务后再生成');
+    }
+    abortRef.current = new AbortController();
+    return request(
+      '/api/diary/ai',
+      { ...body, key, textModel, imageModel },
+      abortRef.current.signal,
+    );
+  }
+  function loadEntry(entry: Entry) {
+    const copy = structuredClone(entry);
+    if (copy.sample) {
+      copy.id = crypto.randomUUID();
+      copy.revision = 0;
+      delete copy.sample;
+      copy.local = localMode;
+      if (paired) {
+        const other = role === 'host' ? 'guest' : 'host';
+        copy.notes[role] = copy.notes.host + '\n' + copy.notes.guest;
+        copy.notes[other] = '';
+      }
+    }
+    setDraft(copy);
+    setHistory([]);
+    setConflict(null);
+    setTab('write');
+    setDirty(true);
+    setModal(null);
+    setNotice(
+      entry.sample
+        ? '已载入示例，可以修改后保存为你的日记'
+        : '已打开日记，可补充自己的片段或编辑故事',
+    );
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function chooseEntry(entry: Entry) {
+    if (hasDraft && dirty) {
+      setPendingEntry(entry);
+      openModal('replace');
+    } else loadEntry(entry);
+  }
+  function startNew() {
+    const blank = newEntry();
+    if (hasDraft && dirty) {
+      setPendingEntry(blank);
+      openModal('replace');
+    } else {
+      setDraft(blank);
+      setHistory([]);
+      setTab('write');
+      setConflict(null);
+    }
+  }
+  function generateStory() {
+    if (!draft) return;
+    void run('story', async () => {
+      const result = await ai({
+        action: 'story',
+        notes: draft.notes,
+        mode: draft.mode,
+        references: allMemories
+          .filter((e) => draft.references.includes(e.id))
+          .map((e) => ({ title: e.title, story: e.story })),
+      });
+      if (draft.story)
+        setHistory((h) =>
+          [{ title: draft.title, story: draft.story }, ...h].slice(0, 6),
+        );
+      patch({ title: result.title, story: result.story });
+      setNotice('故事已写好，可以直接修改标题和正文，再决定是否配图');
+    });
+  }
+  async function addFile(file?: File) {
+    if (!file || !draft) return;
+    await run('upload', async () => {
+      if (draft.pictures.length >= 6)
+        throw new Error('每篇日记最多放 6 张图片');
+      const src = await readPicture(file);
+      patch({
+        pictures: [
+          ...draft.pictures,
+          { id: crypto.randomUUID(), src, kind: 'uploaded', prompt: '' },
+        ],
+      });
+      setNotice('照片已放入草稿，可以直接保留，也可以继续改图');
+    });
+  }
+  function openImage(source?: Picture) {
+    if (!draft) return;
+    setImageDraft({
+      ...imageDefault(),
+      source,
+      scene: source ? '保留人物和构图，调整为所选风格' : draft.title,
+    });
+    openModal('image');
   }
   async function save() {
-    if (!editing || editing.owner !== active || !title.trim() || !draft.trim())
-      return;
-    setSavingMemory(true);
-    const newAttachments = draftAttachments.filter((item) => item.file);
-    try {
-      await Promise.all(
-        newAttachments.map((item) => saveAttachmentBlob(item.id, item.file!)),
-      );
-    } catch {
-      await Promise.allSettled(
-        newAttachments.map((item) => deleteAttachmentBlob(item.id)),
-      );
-      setSavingMemory(false);
-      setNotice('附件保存失败，请检查浏览器存储空间');
+    if (!draft || !draft.story.trim() || !draft.title.trim()) return;
+    if (!localMode && !session) {
+      openModal('space');
+      setDialogError('先连接双人日记，再把这一页保存到共同记忆。草稿已保留。');
       return;
     }
-    const attachments = draftAttachments.map(
-      ({ file: _file, ...item }) => item,
-    );
-    const m = reviseMemory(
-      { ...editing, id: editing.id === 'new' ? uid() : editing.id },
-      {
-        title: title.trim(),
-        text: draft.trim(),
-        subject,
-        shared: true,
-        tags: [
-          ...new Set(
-            keywords
-              .split(/[，,。 、\s]+/)
-              .map((t) => t.trim())
-              .filter(Boolean),
-          ),
-        ],
-        attachments,
-      },
-    );
-    setMemories((prev) =>
-      editing.id === 'new'
-        ? [...prev, m]
-        : prev.map((x) => (x.id === m.id ? m : x)),
-    );
-    const kept = new Set(attachments.map((item) => item.id));
-    await Promise.allSettled(
-      (editing.attachments ?? [])
-        .filter((item) => !kept.has(item.id))
-        .map((item) => deleteAttachmentBlob(item.id)),
-    );
-    setSavingMemory(false);
-    setEditing(null);
-    setNotice(
-      subject !== active
-        ? '已分享，等待对方确认后才参与回复'
-        : '已保存到这台设备上的演示空间',
-    );
-  }
-  // Old private memories remain in local storage but are never shown or promoted to shared.
-  const visibleMemories = memories.filter((m) => m.shared);
-  function confirm(m: Memory) {
-    if (!canReview(m, active)) return;
-    setMemories((all) =>
-      all.map((x) =>
-        x.id === m.id ? reviewMemory(x, active, 'confirmed') : x,
-      ),
-    );
-    setNotice('你已确认这份理解，接待助手可以引用了');
-  }
-  function respond(m: Memory, decision: 'disputed' | 'deferred', text = '') {
-    setMemories((all) =>
-      all.map((x) =>
-        x.id === m.id ? reviewMemory(x, active, decision, text) : x,
-      ),
-    );
-    setReviewing(null);
-    setFeedback('');
-    setNotice(
-      decision === 'disputed'
-        ? '已保留分歧和双方原话，助手不会引用这条理解'
-        : '已放到稍后再说，不催促，也不供助手引用',
-    );
-  }
-  function sendHuman() {
-    if (!humanReply.trim() || !replyTo) return;
-    const original = messages.find(
-      (m) => m.id === replyTo && m.recipient === active,
-    );
-    if (!original || original.from === '此间') return;
-    cancelReception();
-    const ownReply: Message = {
-      id: uid(),
-      from: active,
-      text: humanReply.trim(),
-      replyToId: replyTo,
-      recipient: original.from as Person,
-      sentAt: Date.now(),
-      sources: [],
-    };
-    setStyles((all) => learnMessage(all, ownReply));
-    setMessages((all) => [...completeHandoff(all, replyTo, active), ownReply]);
-    changePresence('takeover');
-    setReplyTo(null);
-    setHumanReply('');
-    setNotice('已由' + active + '本人回复');
-  }
-  function memoryCard(m: Memory) {
-    return (
-      <article className="memory-card" key={m.id}>
-        {!!m.attachments?.length && (
-          <div className="memory-attachments">
-            {m.attachments.map((attachment) => (
-              <AttachmentView attachment={attachment} key={attachment.id} />
-            ))}
-          </div>
-        )}
-        <h3>{m.title}</h3>
-        <p>{m.text}</p>
-        <div className="memory-meta">
-          <Avatar person={m.owner} mini />
-          <span>
-            {m.owner}讲述 · 关于{m.subject}
-          </span>
-        </div>
-        <div className="row-between memory-status-row">
-          <span className={'pill ' + (m.confirmed ? 'confirmed' : 'warm')}>
-            {m.confirmed ? (
-              <>
-                <Check size={12} />
-                已确认
-              </>
-            ) : memoryStatus(m) === 'disputed' ? (
-              '存在分歧 · 不参与回复'
-            ) : memoryStatus(m) === 'deferred' ? (
-              '稍后再说'
-            ) : m.owner === active ? (
-              '等待对方回应'
-            ) : (
-              '等你回应'
-            )}
-          </span>
-          {m.owner === active && (
-            <button
-              className="icon-button"
-              aria-label={'编辑' + m.title}
-              onClick={() => edit(m)}
-            >
-              <Pencil size={15} />
-            </button>
-          )}
-        </div>
-        {!!m.reviews?.length && (
-          <details className="review-history">
-            <summary>查看回应与原话（{m.reviews.length}）</summary>
-            {m.reviews.map((r, i) => (
-              <div className="review-entry" key={i}>
-                <small>当时的理解</small>
-                <p>“{r.originalText}”</p>
-                <strong>
-                  {r.reviewer} ·{' '}
-                  {r.decision === 'disputed'
-                    ? '不太符合'
-                    : r.decision === 'deferred'
-                      ? '稍后再说'
-                      : '符合我的理解'}
-                </strong>
-                {r.text && <p>{r.text}</p>}
-              </div>
-            ))}
-          </details>
-        )}
-        {!m.confirmed && canReview(m, active) && (
-          <div className="review-actions">
-            <button className="text-button" onClick={() => confirm(m)}>
-              <Check size={14} />
-              这符合我的理解
-            </button>
-            <button
-              className="outline-button"
-              onClick={() => {
-                setReviewing(m);
-                setFeedback('');
-              }}
-            >
-              不太符合
-            </button>
-            <button
-              className="text-button"
-              disabled={memoryStatus(m) === 'deferred'}
-              onClick={() => respond(m, 'deferred')}
-            >
-              稍后再说
-            </button>
-          </div>
-        )}
-      </article>
-    );
-  }
-  const labels: Record<string, string> = {
-    chat: '此刻的我们',
-    perspectives: '彼此的模样',
-    memories: '共同记忆',
-    handoff: '待你回应',
-  };
-  return (
-    <SidebarProvider
-      style={{ '--sidebar-width': '208px' } as React.CSSProperties}
-    >
-      <Sidebar className="app-sidebar">
-        <SidebarHeader>
-          <div className="brand">
-            <span className="brandmark">
-              <Heart size={23} />
-            </span>
-            <div>
-              此间<span>BETWEEN US</span>
-            </div>
-          </div>
-        </SidebarHeader>
-        <SidebarContent className="our-sidebar-content">
-          <p className="nav-caption">只属于我们的空间</p>
-          <SidebarMenu>
-            {nav.map((n) => (
-              <SidebarMenuItem key={n.id}>
-                <SidebarMenuButton
-                  className="nav-item"
-                  isActive={view === n.id}
-                  onClick={() => setView(n.id)}
-                >
-                  <n.icon />
-                  <span>{n.name}</span>
-                  {n.id === 'handoff' && pending.length > 0 && (
-                    <b className="count">{pending.length}</b>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarContent>
-        <SidebarFooter className="account-footer">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className="account-trigger"
-              aria-label="账号与设置"
-            >
-              <Avatar person={active} mini />
-              <span>
-                {active}
-                <small>体验账号</small>
-              </span>
-              <ChevronDown size={15} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              side="top"
-              align="start"
-              className="account-menu"
-            >
-              <DropdownMenuItem onClick={() => setLoginOpen(true)}>
-                <LogIn size={16} /> 登录 / 账号
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={openSettings}>
-                <Settings2 size={16} /> 设置
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={openOnboarding}>
-                <BookHeart size={16} /> 使用引导
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onExit}>
-                <Heart size={16} /> 返回封面
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </SidebarFooter>
-      </Sidebar>
-      <nav className="mobile-bottom-nav" aria-label="页面导航">
-        {nav.map(n => <button key={n.id} aria-current={view === n.id ? 'page' : undefined} onClick={() => setView(n.id)}><n.icon size={20} /><span>{n.name}</span>{n.id === 'handoff' && pending.length > 0 && <i aria-label={pending.length + '条待回应'} />}</button>)}
-      </nav>
-      <main className="workspace">
-        <header className="topbar">
-          <div className="breadcrumb">
-            <SidebarTrigger className="mobile-toggle" />
-            <span>我们的空间</span>
-            <ChevronRight size={14} />
-            <strong>{labels[view]}</strong>
-          </div>
-          <div className="demo-badge">
-            <span />
-            交互 Demo
-          </div>
-        </header>
-        <div className={"content view-" + view}>
-          <div className="page-heading">
-            <div>
-              <p className="eyebrow">{view === 'chat' ? 'JUST YOU & ME' : view === 'memories' ? 'OUR SHARED PAGES' : view === 'perspectives' ? 'THROUGH YOUR EYES' : 'WHEN YOU RETURN'}</p>
-              <h1>
-                {view === 'chat'
-                  ? '今天，也想和你说说话。'
-                  : view === 'perspectives'
-                    ? '你眼里的我，我眼里的你。'
-                    : view === 'memories'
-                      ? '我们一起，记得的小事。'
-                      : '这几句话，等你亲自回应。'}
-              </h1>
-              <p>
-                {view === 'chat'
-                  ? '有空时聊聊，忙碌时也可以留句话。'
-                  : view === 'perspectives'
-                    ? '我的感受、你的理解，都值得有自己的位置。'
-                    : view === 'memories'
-                      ? '每一段记忆，都保留讲述它的人。'
-                      : '小助手没能回答的部分，留在这里等你。'}
-              </p>
-            </div>
-            <button
-              className="outline-button switch-person"
-              onClick={switchPerson}
-            >
-              <ArrowLeftRight size={16} />
-              切换为{partner}
-            </button>
-          </div>
-          {view === 'chat' && (
-            <>
-              <section className="presence">
-                <div className="person-status">
-                  <Avatar person={active} large />
-                  <div>
-                    <strong>
-                      {active} <small>你</small>
-                    </strong>
-                    <div className="self-status-row">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          className="status-trigger"
-                          aria-label="切换我的状态"
-                        >
-                          <span
-                            className={
-                              'status-dot ' + (busy[active] ? 'amber' : '')
-                            }
-                          />
-                          {busy[active] ? '忙碌' : '在线'}
-                          <ChevronDown size={13} />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="status-menu">
-                          <DropdownMenuItem onClick={takeOver}>
-                            在线
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              changePresence('busy');
-                              setNotice('已设为忙碌');
-                            }}
-                          >
-                            忙碌
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                      <span>{active === '林屿' ? '上海' : '杭州'}</span>
-                      {busy[active] && (
-                        <button
-                          className="text-button take-back"
-                          onClick={takeOver}
-                        >
-                          接回对话
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="distance">
-                  <span />
-                  <Heart size={15} />
-                  <span />
-                  <small>上海 · 杭州 / 示例中的两座城</small>
-                </div>
-                <div className="person-status">
-                  <Avatar person={partner} large />
-                  <div>
-                    <strong>{partner}</strong>
-                    <p>
-                      <span
-                        className={
-                          'status-dot ' + (busy[partner] ? 'amber' : '')
-                        }
-                      />
-                      {presenceLabel(presence[partner], now)} ·{' '}
-                      {partner === '林屿' ? '上海' : '杭州'}
-                    </p>
-                  </div>
-                </div>
-              </section>
-              <div className="chat-layout">
-                <section className="chat-panel">
-                  <div className="chat-title">
-                    <span className="small-icon">
-                      <MessageCircle size={19} />
-                    </span>
-                    <div className="chat-heading">
-                      <h2>{partner}<span className="conversation-label"> / 留给彼此的话</span></h2>
-                      <p>
-                        {busy[partner]
-                          ? reception[partner]
-                            ? partner + '的 AI 助手正在接待'
-                            : '留言会留给' + partner
-                          : presenceStatus(presence[partner], now) === 'grace'
-                            ? '等' + partner + '回来接着聊'
-                            : partner + '在这里'}
-                      </p>
-                    </div>
-                    <div className="chat-assistant-controls">
-                      <label htmlFor="auto">我的助手</label>
-                      <Switch
-                        id="auto"
-                        checked={auto}
-                        onCheckedChange={setAuto}
-                      />
-                      <button
-                        className="chat-settings-button"
-                        aria-label="助手设置"
-                        title="助手设置"
-                        onClick={openSettings}
-                      >
-                        <Settings2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                  <div
-                    className="chat-messages"
-                    ref={chatLog}
-                    data-ready={loaded}
-                    aria-busy={!loaded}
-                    role="log"
-                    aria-label="对话记录"
-                    aria-live="polite"
-                  >
-                    <div className="day-label">今天 · 演示对话</div>
-                    {messages.map((m) => (
-                      <div
-                        className={
-                          'message ' +
-                          (m.from === active ? 'mine' : '') +
-                          ' ' +
-                          (m.from === '此间' ? 'assistant' : '')
-                        }
-                        key={m.id}
-                        id={'message-' + m.id}
-                      >
-                        {m.from !== active && (
-                          <Avatar
-                            person={
-                              m.from === '此间'
-                                ? (m.assistantFor ?? m.recipient ?? '此间')
-                                : m.from
-                            }
-                            assistant={m.from === '此间'}
-                            mini
-                          />
-                        )}
-                        <div className="message-body">
-                          <div className="sender">{assistantName(m)}</div>
-                          <div className="bubble">{m.text}</div>
-                          {m.from === '此间' && (
-                            <div className="reply-tools">
-                              <span>
-                                {m.replyMode === 'model'
-                                  ? 'AI 接待'
-                                  : m.replyMode === 'fallback'
-                                    ? '模型连接失败 · 基础接待'
-                                    : '基础接待'}
-                              </span>
-                              {(m.assistantFor ?? m.recipient) === active && (
-                                <button
-                                  onClick={() => {
-                                    setCorrection(m);
-                                    setCorrectionText('');
-                                  }}
-                                >
-                                  这句不像我
-                                </button>
-                              )}
-                            </div>
-                          )}
-                          {m.sources.length > 0 && (
-                            <button
-                              className="source-link"
-                              onClick={() => setSourceIds(m.sources)}
-                            >
-                              <BookHeart size={12} />
-                              来自 {m.sources.length} 条已确认记忆
-                              <ChevronRight size={12} />
-                            </button>
-                          )}
-                          {m.pending && (
-                            <span className="pending-label">
-                              <Clock3 size={12} />
-                              已留给{m.recipient}本人回应
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {generating && (
-                      <p className="reply-loading" role="status">
-                        {generating}的 AI 助手正在整理回复…
-                      </p>
-                    )}
-                  </div>
-                  <div className="composer">
-                    <div className="suggestions">
-                      {['你几点忙完？', '今天有点委屈', '周末我们去哪？'].map(
-                        (t) => (
-                          <button onClick={() => send(t)} key={t}>
-                            {t}
-                          </button>
-                        ),
-                      )}
-                    </div>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        send();
-                      }}
-                    >
-                      <textarea
-                        aria-label="留给对方的话"
-                        placeholder={'想和' + partner + '说些什么…'}
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (
-                            e.key === 'Enter' &&
-                            !e.shiftKey &&
-                            !e.nativeEvent.isComposing
-                          ) {
-                            e.preventDefault();
-                            send();
-                          }
-                        }}
-                        rows={2}
-                        maxLength={1000}
-                      />
-                      <button
-                        className="send-button"
-                        aria-label="发送消息"
-                        disabled={
-                          !input.trim() || !loaded || generating === partner
-                        }
-                      >
-                        <ArrowUp size={21} />
-                      </button>
-                    </form>
-                    <p>
-                      <Sparkles size={12} />
-                      {modelSettings[partner].apiKey
-                        ? 'AI 接待始终标识身份 · 重要决定留给本人'
-                        : '尚未配置对方的模型 · 当前使用基础接待'}
-                    </p>
-                  </div>
-                </section>
-                <aside className="context-column">
-                  <MemoryFragments
-                    key={active}
-                    memories={visibleMemories}
-                    person={active}
-                    onOpen={setSourceIds}
-                  />
-                  <div className="gentle-note">
-                    <Heart size={15} />
-                    <p>
-                      重要的情感和承诺，
-                      <br />
-                      留给你们亲自表达。
-                    </p>
-                  </div>
-                </aside>
-              </div>
-            </>
-          )}
-          {view === 'perspectives' && (
-            <>
-              <GuessGameCard
-                person={active}
-                onSwitch={switchPerson}
-                onChat={(text) => { setView('chat'); setInput(text); }}
-                onRemember={(title, text) => edit({
-                  id: 'new', title, text, owner: active, subject: '我们',
-                  shared: true, confirmed: false, tags: ['猜你会怎么选'],
-                })}
-              />
-              <div className="perspective-archive-heading"><p className="eyebrow">OUR GROWING PORTRAIT</p><h2>慢慢认识的我们</h2><p>你说的自己，我眼里的你，都留在这里。</p></div>
-              <div className="section-toolbar">
-                <span>
-                  <Layers size={17} />
-                  四个视角，保留各自的声音
-                </span>
-                <button className="primary-button" onClick={() => edit()}>
-                  <Plus size={17} />
-                  添加我的认知
-                </button>
-              </div>
-              <div className="perspective-grid">
-                {[
-                  {
-                    owner: active,
-                    subject: active,
-                    name: '我眼中的自己',
-                    sub: '你来定义你自己',
-                    mark: '01',
-                  },
-                  {
-                    owner: active,
-                    subject: partner,
-                    name: '我眼中的你',
-                    sub: '你的理解，等待对方回应',
-                    mark: '02',
-                  },
-                  {
-                    owner: partner,
-                    subject: active,
-                    name: '你眼中的我',
-                    sub: '听听另一种看见',
-                    mark: '03',
-                  },
-                  {
-                    owner: partner,
-                    subject: partner,
-                    name: '你眼中的自己',
-                    sub: '对方愿意分享的自我',
-                    mark: '04',
-                  },
-                ].map((q) => (
-                  <section className="perspective" key={q.mark}>
-                    <header>
-                      <span className="quadrant-number">{q.mark}</span>
-                      <div>
-                        <h2>{q.name}</h2>
-                        <p>{q.sub}</p>
-                      </div>
-                      <Avatar person={q.owner} />
-                    </header>
-                    {visibleMemories
-                      .filter(
-                        (m) => m.owner === q.owner && m.subject === q.subject,
-                      )
-                      .map(memoryCard)}
-                    {!visibleMemories.some(
-                      (m) => m.owner === q.owner && m.subject === q.subject,
-                    ) && (
-                      <p className="empty-small">
-                        还没有分享这个视角。可以从一件小事开始。
-                      </p>
-                    )}
-                  </section>
-                ))}
-              </div>
-              <section className="insight">
-                <span className="small-icon">
-                  <Sparkles size={21} />
-                </span>
-                <div>
-                  <p className="eyebrow">A DIFFERENT PERSPECTIVE</p>
-                  <h2>同样的安静，可能有两种理解。</h2>
-                  <p>
-                    知夏说，难过时想先被听见；林屿曾以为，她更想独处。这是一组值得聊聊的示例，彼此的原话都保留着。
-                  </p>
-                  <button
-                    className="text-button"
-                    onClick={() => {
-                      setView('chat');
-                      setInput(
-                        '我发现我们对“安静”有不同理解，有空时一起聊聊好吗？',
-                      );
-                    }}
-                  >
-                    把这个话题带回对话
-                    <ArrowUpRight size={15} />
-                  </button>
-                </div>
-              </section>
-            </>
-          )}
-          {view === 'memories' && (
-            <>
-              <div className="section-toolbar">
-                <span>
-                  <BookHeart size={17} />
-                  {visibleMemories.length} 条可见记忆 · 由你们共同书写
-                </span>
-                <button className="primary-button" onClick={() => edit()}>
-                  <Plus size={17} />
-                  记住一件小事
-                </button>
-              </div>
-              <Tabs
-                value={filter}
-                onValueChange={(v) => setFilter(String(v))}
-                className="memory-tabs"
-              >
-                <TabsList className="filter-tabs">
-                  {[
-                    ['all', '全部记忆'],
-                    ['shared', '双方共享'],
-                    ['pending', '等待回应'],
-                    ['disputed', '存在分歧'],
-                    ['deferred', '稍后再说'],
-                  ].map(([value, label]) => (
-                    <TabsTrigger value={value} key={value}>
-                      {label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-                {['all', 'shared', 'pending', 'disputed', 'deferred'].map(
-                  (f) => (
-                    <TabsContent value={f} key={f}>
-                      <div className="memory-grid">
-                        {visibleMemories
-                          .filter(
-                            (m) =>
-                              f === 'all' ||
-                              (f === 'shared' && m.shared) ||
-                              (m.shared && f === memoryStatus(m)),
-                          )
-                          .sort((a, b) => Number(!!b.attachments?.some((x) => x.kind === 'image')) - Number(!!a.attachments?.some((x) => x.kind === 'image')))
-                          .map(memoryCard)}
-                      </div>
-                      {!visibleMemories.some(
-                        (m) =>
-                          f === 'all' ||
-                          (f === 'shared' && m.shared) ||
-                          (m.shared && f === memoryStatus(m)),
-                      ) && (
-                        <div className="empty-state">
-                          <BookHeart size={32} />
-                          <h2>
-                            {f === 'pending'
-                              ? '没有等待确认的记忆'
-                              : '这里还空着'}
-                          </h2>
-                          <p>
-                            {f === 'pending'
-                              ? '下一份新的理解，可以慢慢聊。'
-                              : '写下愿意和对方分享的偏好，或一段共同回忆。'}
-                          </p>
-                          <button
-                            className="outline-button"
-                            onClick={() => edit()}
-                          >
-                            添加一条记忆
-                          </button>
-                        </div>
-                      )}
-                    </TabsContent>
-                  ),
-                )}
-              </Tabs>
-              <div className="info-note memory-explain">
-                <LockKeyhole size={17} />
-                这里的记忆双方都能看见。关于对方或共同经历的新记录，需要另一方确认后，助手才会引用。
-              </div>
-            </>
-          )}
-          {view === 'handoff' && (
-            <>
-              <section className="handoff-summary">
-                <div>
-                  <h2>
-                    {pending.length
-                      ? pending.length + ' 条留言，等你接着聊'
-                      : '暂时没有 AI 未答的问题'}
-                  </h2>
-                  <p>关系与感受优先展示，AI 已答清楚的内容不再列入。</p>
-                </div>
-                {busy[active] && (
-                  <button className="outline-button" onClick={takeOver}>
-                    接回对话
-                  </button>
-                )}
-              </section>
-              {pending.length > 0 ? (
-                <div className="handoff-list">
-                  {pending.map(({ message: m, parts }) => (
-                    <article className="handoff-item" key={m.id}>
-                      <Avatar person={m.from} mini />
-                      <div>
-                        <div className="row-between">
-                          <strong>{m.from} · 等你回应</strong>
-                          {m.sentAt && <small>{formatTime(m.sentAt)}</small>}
-                        </div>
-                        <div className="unanswered-parts">
-                          {parts.map((part, index) => (
-                            <div className="unanswered-part" key={index}>
-                              <span
-                                className={
-                                  'pill ' +
-                                  (part.priority < 2 ? 'warm' : 'neutral')
-                                }
-                              >
-                                {unansweredLabels[part.reason]}
-                              </span>
-                              <p>{part.text}</p>
-                            </div>
-                          ))}
-                        </div>
-                        <details className="handoff-context">
-                          <summary>展开原消息与 AI 回复</summary>
-                          <p>{m.text}</p>
-                          <small>
-                            {assistantName(
-                              messages.find(
-                                (item) =>
-                                  item.from === '此间' &&
-                                  item.replyToId === m.id,
-                              )!,
-                            )}
-                          </small>
-                          <p>
-                            {
-                              messages.find(
-                                (item) =>
-                                  item.from === '此间' &&
-                                  item.replyToId === m.id,
-                              )?.text
-                            }
-                          </p>
-                        </details>
-                        <div className="handoff-actions">
-                          <button
-                            className="primary-button"
-                            onClick={() => {
-                              setReplyTo(m.id);
-                              setHumanReply('');
-                            }}
-                          >
-                            回应这些内容 <ArrowUpRight size={15} />
-                          </button>
-                          <button
-                            className="text-button"
-                            onClick={() => {
-                              setMessages((all) =>
-                                completeHandoff(all, m.id, active),
-                              );
-                              setNotice('已标记处理，不会发送新消息');
-                            }}
-                          >
-                            已当面回应
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state">
-                  <Check size={32} />
-                  <h2>需要你回应的话，会整理在这里</h2>
-                  <p>
-                    AI 未能回答的信息与需要本人回应的感受，将按重要程度排列。
-                  </p>
-                </div>
-              )}
-              <button className="text-button" onClick={() => setView('chat')}>
-                回到对话 <ChevronRight size={15} />
-              </button>
-            </>
-          )}
-        </div>
-        <footer className="page-footer">
-          <span>此间 · 让每一句话，都有来处。</span>
-          <span>虚构人物 / 本机演示 / 不向真实联系人发消息</span>
-        </footer>
-      </main>
-      <Dialog
-        open={onboardingOpen}
-        onOpenChange={(open) => {
-          if (!open) finishOnboarding();
-        }}
-      >
-        <DialogContent className="our-dialog onboarding-dialog">
-          <div className="onboarding-progress" aria-label="使用引导进度">
-            {[0, 1, 2].map((step) => (
-              <span
-                key={step}
-                className={step === onboardingStep ? 'active' : ''}
-              />
-            ))}
-          </div>
-          {onboardingStep === 0 ? (
-            <div className="onboarding-content">
-              <span className="onboarding-icon">
-                <Bot size={26} />
-              </span>
-              <DialogTitle>忙的时候，先帮你接住日常</DialogTitle>
-              <DialogDescription>
-                你离开或标记忙碌后，AI
-                助手可以回应普通日常。涉及感情态度、决定和承诺的话，会留给你本人。
-              </DialogDescription>
-            </div>
-          ) : onboardingStep === 1 ? (
-            <div className="onboarding-content">
-              <span className="onboarding-icon">
-                <BookHeart size={26} />
-              </span>
-              <DialogTitle>重要的事，只从确认过的记忆里来</DialogTitle>
-              <DialogDescription>
-                共同记忆经双方确认后才能被助手引用。带有记忆来源的回复可以随时查看，有分歧的内容不再使用。
-              </DialogDescription>
-            </div>
-          ) : (
-            <div className="onboarding-content">
-              <span className="onboarding-icon">
-                <Sparkles size={26} />
-              </span>
-              <DialogTitle>助手会自己慢慢学会</DialogTitle>
-              <DialogDescription>
-                你不需要先填风格设置。AI
-                会根据你亲自说过的话学习表达；如果它理解错了，你随时可以修改或删除这些口吻记忆。
-              </DialogDescription>
-            </div>
-          )}
-          <div className="onboarding-actions">
-            <button className="text-button" onClick={finishOnboarding}>
-              跳过
-            </button>
-            <div>
-              {onboardingStep > 0 && (
-                <button
-                  className="outline-button"
-                  onClick={() => setOnboardingStep((step) => step - 1)}
-                >
-                  上一步
-                </button>
-              )}
-              {onboardingStep < 2 ? (
-                <button
-                  className="primary-button"
-                  onClick={() => setOnboardingStep((step) => step + 1)}
-                >
-                  继续
-                </button>
-              ) : (
-                <button className="primary-button" onClick={finishOnboarding}>
-                  开始体验
-                </button>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={sourceIds !== null}
-        onOpenChange={(o) => !o && setSourceIds(null)}
-      >
-        <DialogContent className="our-dialog">
-          <DialogTitle>这句话，从哪里来</DialogTitle>
-          <DialogDescription>
-            以下展示记忆的当前版本。未确认的理解不会作为事实生成新回复。
-          </DialogDescription>
-          {memories
-            .filter((m) => sourceIds?.includes(m.id) && m.shared)
-            .map((m) => (
-              <div className="source-card" key={m.id}>
-                <span className="pill">
-                  {m.owner}留下 ·{' '}
-                  {memoryStatus(m) === 'confirmed'
-                    ? '已确认'
-                    : memoryStatus(m) === 'disputed'
-                      ? '存在分歧，不再引用'
-                      : memoryStatus(m) === 'deferred'
-                        ? '稍后再说，不再引用'
-                        : '已修改，等待确认'}
-                </span>
-                <h3>{m.title}</h3>
-                <p>“{m.text}”</p>
-              </div>
-            ))}
-          {!memories.some((m) => sourceIds?.includes(m.id) && m.shared) && (
-            <p className="info-note">
-              这条记忆已停止共享。之前已发出的对话保留，新的回复不再引用。
-            </p>
-          )}
-        </DialogContent>
-      </Dialog>
-      <Dialog open={settings} onOpenChange={setSettings}>
-        <DialogContent className="our-dialog settings-dialog">
-          <DialogTitle>设置</DialogTitle>
-          <DialogDescription>
-            当前设置属于{active}
-            ，只影响当前浏览器里的演示空间。对方需切换身份后自行设置。
-          </DialogDescription>
-          <Tabs
-            value={settingsTab}
-            onValueChange={setSettingsTab}
-            className="settings-tabs"
-          >
-            <TabsList className="settings-tab-list">
-              <TabsTrigger value="reception">接待设置</TabsTrigger>
-              <TabsTrigger value="model">模型设置</TabsTrigger>
-              <TabsTrigger value="style">口吻记忆</TabsTrigger>
-            </TabsList>
-            <TabsContent value="reception" className="settings-panel">
-              <div className="toggle-row">
-                <label htmlFor="setting-auto">
-                  离开或忙碌时允许我的助手接待
-                </label>
-                <Switch
-                  id="setting-auto"
-                  checked={auto}
-                  onCheckedChange={setAuto}
-                />
-              </div>
-              <div className="info-note">
-                离开页面 2
-                分钟后才进入自动接待；返回页面立即暂停。手动忙碌不受返回影响，点击“接回”或本人发送消息后解除。重要感情和承诺仍交给本人。
-              </div>
-              <p className="info-note">
-                离开判断不代表真实忙碌。关闭页面后不能继续接待；真实的跨设备服务需要服务端。
-              </p>
-            </TabsContent>
-            <TabsContent value="model" className="settings-panel">
-              <div className="model-setting-heading">
-                <span className="small-icon">
-                  <Bot size={18} />
-                </span>
-                <div>
-                  <strong>模型与 API</strong>
-                  <p>在这里完成密钥配置和模型切换。</p>
-                </div>
-              </div>
-              <div className="model-fields">
-                <div className="model-field">
-                  <span className="field-label">API 服务</span>
-                  <Select
-                    value={modelDraft.provider}
-                    onValueChange={(value) =>
-                      changeModelProvider(value as ModelProvider)
-                    }
-                  >
-                    <SelectTrigger aria-label="API 服务">
-                      <SelectValue>
-                        {MODEL_PROVIDERS[modelDraft.provider].label}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent align="start">
-                      {(Object.keys(MODEL_PROVIDERS) as ModelProvider[]).map(
-                        (provider) => (
-                          <SelectItem value={provider} key={provider}>
-                            {MODEL_PROVIDERS[provider].label}
-                          </SelectItem>
-                        ),
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="model-field">
-                  <label htmlFor="model-api-key">API Key</label>
-                  <div className="api-key-field">
-                    <Input
-                      id="model-api-key"
-                      type={showApiKey ? 'text' : 'password'}
-                      autoComplete="off"
-                      spellCheck={false}
-                      value={modelDraft.apiKey}
-                      placeholder="sk-……"
-                      onChange={(event) =>
-                        setModelDraft((current) => ({
-                          ...current,
-                          apiKey: event.target.value,
-                        }))
-                      }
-                    />
-                    <button
-                      type="button"
-                      className="api-key-visibility"
-                      aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
-                      onClick={() => setShowApiKey((visible) => !visible)}
-                    >
-                      {showApiKey ? <EyeOff size={17} /> : <Eye size={17} />}
-                    </button>
-                  </div>
-                </div>
-                <div className="model-field">
-                  <span className="field-label">使用模型</span>
-                  {modelDraft.provider === 'custom' ? (
-                    <Input
-                      aria-label="模型 ID"
-                      value={modelDraft.model}
-                      placeholder="输入模型 ID"
-                      onChange={(event) =>
-                        setModelDraft((current) => ({
-                          ...current,
-                          model: event.target.value,
-                        }))
-                      }
-                    />
-                  ) : (
-                    <Select
-                      value={modelDraft.model}
-                      onValueChange={(value) =>
-                        setModelDraft((current) => ({
-                          ...current,
-                          model: value as string,
-                        }))
-                      }
-                    >
-                      <SelectTrigger aria-label="使用模型">
-                        <SelectValue>
-                          {modelDisplayName(modelDraft)}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent align="start">
-                        {MODEL_PROVIDERS[modelDraft.provider].models.map(
-                          (model) => (
-                            <SelectItem value={model.value} key={model.value}>
-                              {model.label}
-                            </SelectItem>
-                          ),
-                        )}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-                {modelDraft.provider === 'custom' && (
-                  <div className="model-field">
-                    <label htmlFor="model-api-url">API 地址</label>
-                    <Input
-                      id="model-api-url"
-                      type="url"
-                      value={modelDraft.baseUrl}
-                      placeholder="https://api.example.com/v1"
-                      onChange={(event) =>
-                        setModelDraft((current) => ({
-                          ...current,
-                          baseUrl: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                )}
-              </div>
-              <div className="model-save-row">
-                <span>当前：{modelDisplayName(modelSettings[active])}</span>
-                {modelSettings[active].apiKey && (
-                  <button
-                    className="text-button"
-                    onClick={() => {
-                      cancelReception();
-                      setModelSettings((all) => ({
-                        ...all,
-                        [active]: { ...all[active], apiKey: '' },
-                      }));
-                      setModelDraft((current) => ({ ...current, apiKey: '' }));
-                      setNotice('已清除本次会话的密钥，恢复基础接待');
-                    }}
-                  >
-                    停用模型
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={saveModelSettings}
-                >
-                  保存模型设置
-                </button>
-              </div>
-              <p className="info-note model-security-note">
-                保存后，接待会将近期对话、已确认记忆和口吻样本发送给所选模型服务。API
-                Key 仅保留在当前标签页会话中。演示身份切换不构成账号隔离。
-              </p>
-              {modelDraft.provider === 'custom' && (
-                <p className="info-note">
-                  自定义服务需兼容 Chat Completions 和 JSON
-                  输出，并由部署者允许该 HTTPS 地址。
-                </p>
-              )}
-            </TabsContent>
-            <TabsContent value="style" className="settings-panel style-panel">
-              <div className="toggle-row">
-                <label htmlFor="style-enabled">让助手自动学习我的表达</label>
-                <Switch
-                  id="style-enabled"
-                  checked={styles[active].enabled}
-                  onCheckedChange={(enabled) => {
-                    cancelReception();
-                    setStyles((all) => ({
-                      ...all,
-                      [active]: { ...all[active], enabled },
-                    }));
-                  }}
-                />
-              </div>
-              <p className="info-note">
-                不用先填风格选项。助手只学习你亲自发出的新消息和口吻修正，不学习对方或
-                AI 的回复。
-              </p>
-              <div className="communication-section">
-                <div className="communication-heading">
-                  <div>
-                    <strong>AI 目前这样理解你</strong>
-                    <p>它会随你的新表达继续调整。</p>
-                  </div>
-                  <span>
-                    {styles[active].memoryEdited
-                      ? '你修改过'
-                      : styles[active].samples.length
-                        ? 'AI 自动归纳'
-                        : '学习中'}
-                  </span>
-                </div>
-                {editingStyleMemory ? (
-                  <div className="memory-editor">
-                    <textarea
-                      id="style-memory"
-                      aria-label="修改 AI 对你的口吻记忆"
-                      rows={4}
-                      maxLength={500}
-                      value={styleMemoryDraft}
-                      onChange={(event) =>
-                        setStyleMemoryDraft(event.target.value)
-                      }
-                    />
-                    <div className="memory-editor-actions">
-                      <button
-                        className="text-button"
-                        onClick={() => {
-                          setStyleMemoryDraft(rememberedStyle(styles[active]));
-                          setEditingStyleMemory(false);
-                        }}
-                      >
-                        取消
-                      </button>
-                      {styles[active].memoryEdited && (
-                        <button
-                          className="outline-button"
-                          onClick={() => {
-                            cancelReception();
-                            setStyles((all) => ({
-                              ...all,
-                              [active]: {
-                                ...all[active],
-                                memorySummary: '',
-                                memoryEdited: false,
-                              },
-                            }));
-                            setStyleMemoryDraft(styleSummary(styles[active]));
-                            setEditingStyleMemory(false);
-                            setNotice('已恢复 AI 自动归纳');
-                          }}
-                        >
-                          恢复自动归纳
-                        </button>
-                      )}
-                      <button
-                        className="primary-button"
-                        onClick={() => {
-                          const memorySummary = styleMemoryDraft.trim();
-                          cancelReception();
-                          setStyles((all) => ({
-                            ...all,
-                            [active]: {
-                              ...all[active],
-                              memorySummary,
-                              memoryEdited: Boolean(memorySummary),
-                            },
-                          }));
-                          setEditingStyleMemory(false);
-                          setNotice(
-                            memorySummary
-                              ? '已按你的修改更新口吻记忆'
-                              : '已恢复 AI 自动归纳',
-                          );
-                        }}
-                      >
-                        保存修改
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <p className="style-memory-copy">
-                      {rememberedStyle(styles[active])}
-                    </p>
-                    {(styles[active].samples.length > 0 ||
-                      styles[active].memorySummary) && (
-                      <button
-                        className="memory-edit-button"
-                        onClick={() => {
-                          setStyleMemoryDraft(rememberedStyle(styles[active]));
-                          setEditingStyleMemory(true);
-                        }}
-                      >
-                        <Pencil size={15} /> 这里理解得不对，我来修改
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-              <p className="memory-source-note">
-                如果某句 AI 回复不像你，也可以在该消息下点“这句不像我”来教它。
-              </p>
-              {styles[active].samples.length > 0 && (
-                <details className="style-samples">
-                  <summary>查看 AI 学习过的表达</summary>
-                  {[...styles[active].samples].reverse().map((sample) => (
-                    <div className="style-sample" key={sample.id}>
-                      <div>
-                        <span>
-                          {sample.source === 'correction'
-                            ? '你修改的表达'
-                            : '本人消息'}
-                        </span>
-                        <p>{sample.text}</p>
-                      </div>
-                      <button
-                        aria-label={'删除口吻样本：' + sample.text.slice(0, 16)}
-                        onClick={() => {
-                          cancelReception();
-                          setStyles((all) => ({
-                            ...all,
-                            [active]: {
-                              ...all[active],
-                              samples: all[active].samples.filter(
-                                (s) => s.id !== sample.id,
-                              ),
-                            },
-                          }));
-                        }}
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </details>
-              )}
-              <div className="style-memory-footer">
-                <span>
-                  {styles[active].samples.length} 条学习样本 · 仅保存在此浏览器
-                </span>
-                {(styles[active].samples.length > 0 ||
-                  styles[active].memorySummary) && (
-                  <button
-                    className="text-button"
-                    onClick={() => {
-                      cancelReception();
-                      setStyles((all) => ({
-                        ...all,
-                        [active]: {
-                          ...all[active],
-                          memorySummary: '',
-                          memoryEdited: false,
-                          samples: [],
-                        },
-                      }));
-                      setStyleMemoryDraft('');
-                      setEditingStyleMemory(false);
-                      setNotice('已清除口吻记忆与学习样本，不会重新扫描旧消息');
-                    }}
-                  >
-                    清除学习记录
-                  </button>
-                )}
-              </div>
-            </TabsContent>
-          </Tabs>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={correction !== null}
-        onOpenChange={(open) => {
-          if (!open) setCorrection(null);
-        }}
-      >
-        <DialogContent className="our-dialog style-panel">
-          <DialogTitle>换成你会说的话</DialogTitle>
-          <DialogDescription>
-            你的修改会优先用于之后的口吻学习，不会修改或重新发送已经发出的消息。
-          </DialogDescription>
-          <blockquote className="style-original">{correction?.text}</blockquote>
-          <label htmlFor="style-correction">你会怎么表达？</label>
-          <textarea
-            id="style-correction"
-            rows={4}
-            maxLength={500}
-            value={correctionText}
-            onChange={(e) => setCorrectionText(e.target.value)}
-            placeholder="写下你自己的表达方式…"
-          />
-          <button
-            className="primary-button"
-            disabled={!correctionText.trim()}
-            onClick={() => {
-              if (
-                !correction ||
-                (correction.assistantFor ?? correction.recipient) !== active
-              )
-                return;
-              cancelReception();
-              setStyles((all) => ({
-                ...all,
-                [active]: correctStyle(
-                  all[active],
-                  correction.id,
-                  correctionText,
-                ),
-              }));
-              setCorrection(null);
-              setNotice(
-                styles[active].enabled
-                  ? '已记住你的表达，下次接待会参考'
-                  : '已保存表达，开启口吻学习后会使用',
-              );
-            }}
-          >
-            记住这个表达
-          </button>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={reviewing !== null}
-        onOpenChange={(o) => {
-          if (!o) {
-            setReviewing(null);
-            setFeedback('');
-          }
-        }}
-      >
-        <DialogContent className="our-dialog">
-          <DialogTitle>说说你的不同感受</DialogTitle>
-          <DialogDescription>
-            可以直接选择不符合，不需要解释。补充内容会让对方看到，双方原话都会保留，助手不会引用有分歧的理解。
-          </DialogDescription>
-          <div className="source-card">
-            <span className="pill">{reviewing?.owner}的理解</span>
-            <p>{reviewing?.text}</p>
-          </div>
-          <label>
-            我的实际感受（选填）
-            <textarea
-              rows={4}
-              value={feedback}
-              maxLength={600}
-              placeholder="我的实际感受是……"
-              onChange={(e) => setFeedback(e.target.value)}
-            />
-          </label>
-          <button
-            className="primary-button"
-            onClick={() =>
-              reviewing && respond(reviewing, 'disputed', feedback)
+    await run('save', async () => {
+      if (localMode) {
+        const next = {
+          ...draft,
+          local: true,
+          sample: false,
+          updatedAt: Date.now(),
+          revision: draft.revision + 1,
+        };
+        const list = [next, ...localEntries.filter((e) => e.id !== next.id)];
+        await localWrite('entries', list);
+        await localWrite('draft', next);
+        setLocalEntries(list);
+        setDraft(next);
+        setNotice('已保存到本机共同记忆');
+      } else {
+        const pictures: Picture[] = [];
+        const uploads = new Map<string, string>();
+        for (const p of draft.pictures) {
+          const next = { ...p };
+          for (const field of ['src', 'original'] as const) {
+            const value = next[field];
+            if (value?.startsWith('data:')) {
+              let src = uploads.get(value);
+              if (!src) {
+                src = (await request('/api/diary/assets', { data: value })).src;
+                uploads.set(value, src!);
+              }
+              next[field] = src!;
             }
-          >
-            确认不太符合
-          </button>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="our-dialog">
-          <DialogTitle>留下一点关于我们的事</DialogTitle>
-          <DialogDescription>
-            由{active}讲述，保存后双方都能看见。
-          </DialogDescription>
-          <div>
-            <span className="field-label">这件事关于谁</span>
-            <Tabs
-              value={subject}
-              onValueChange={(v) => setSubject(v as Person | '我们')}
-            >
-              <TabsList className="subject-tabs">
-                {[active, partner, '我们'].map((p) => (
-                  <TabsTrigger key={p} value={p}>
-                    {p === active
-                      ? '我自己'
-                      : p === partner
-                        ? '我眼中的' + partner
-                        : '我们共同的事'}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </div>
-          <label>
-            标题
-            <input
-              value={title}
-              maxLength={50}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </label>
-          <label>
-            想记住的话
-            <textarea
-              value={draft}
-              maxLength={600}
-              onChange={(e) => setDraft(e.target.value)}
-              rows={4}
-            />
-          </label>
-          <div className="attachment-editor">
-            <span className="field-label">照片或文件</span>
-            <label className="attachment-picker" htmlFor="memory-attachments">
-              <Paperclip size={17} />
-              <span>
-                添加附件
-                <small>最多 6 个，单个不超过 100 MB</small>
-              </span>
-              <input
-                id="memory-attachments"
-                type="file"
-                multiple
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.zip,.rar,.7z"
-                onChange={(event) => {
-                  addAttachments(event.target.files);
-                  event.target.value = '';
-                }}
-              />
-            </label>
-            {!!draftAttachments.length && (
-              <div className="draft-attachments">
-                {draftAttachments.map((attachment) => (
-                  <AttachmentView
-                    attachment={attachment}
-                    file={attachment.file}
-                    key={attachment.id}
-                    onRemove={() =>
-                      setDraftAttachments((current) =>
-                        current.filter((item) => item.id !== attachment.id),
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-          <label>
-            聊到哪些词时想起它
-            <input
-              placeholder="例如：晚饭、面馆、吃什么"
-              value={keywords}
-              maxLength={100}
-              onChange={(e) => setKeywords(e.target.value)}
-            />
-          </label>
-          <p className="info-note">
-            {subject !== active
-              ? '关于对方或共同经历的记忆，须由对方确认后，助手才会引用。'
-              : '你分享的自我信息，可以作为助手回复的来源。'}
-          </p>
-          <button
-            className="primary-button"
-            disabled={!title.trim() || !draft.trim() || savingMemory}
-            onClick={save}
-          >
-            {savingMemory ? '正在保存…' : '保存记忆'}
-          </button>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={replyTo !== null}
-        onOpenChange={(o) => {
-          if (!o) {
-            setReplyTo(null);
-            setHumanReply('');
           }
-        }}
-      >
-        <DialogContent className="our-dialog">
-          <DialogTitle>现在，换你来回应</DialogTitle>
-          <DialogDescription>
-            这条消息会以{active}本人的身份出现在演示对话中。
-          </DialogDescription>
-          <div className="source-card">
-            <span className="pill">需要你回应的部分</span>
-            {currentHandoff?.parts.map((part, index) => (
-              <p key={index}>{part.text}</p>
-            ))}
-          </div>
-          <label>
-            你想说的话
-            <textarea
-              value={humanReply}
-              onChange={(e) => setHumanReply(e.target.value)}
-              rows={4}
-              maxLength={1000}
-              placeholder="我忙完啦，刚刚看到你的消息…"
-            />
-          </label>
-          <button
-            className="primary-button"
-            disabled={!humanReply.trim()}
-            onClick={sendHuman}
-          >
-            由我发送
-            <ArrowUp size={17} />
-          </button>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
-        <DialogContent className="our-dialog account-dialog">
-          <UserRound size={26} />
-          <DialogTitle>登录此间</DialogTitle>
-          <DialogDescription>
-            当前为体验版，正式账号登录尚未开放。可以选择一个演示身份继续体验。
-          </DialogDescription>
-          <div className="account-choices">
-            <button
-              className="primary-button online-entry-link"
-              onClick={() => {
-                if (window.location.protocol === 'file:') {
-                  setNotice('联机测试需要打开网页版本');
-                  setLoginOpen(false);
-                  return;
-                }
-                window.location.assign('/online');
-              }}
-            >
-              <LogIn size={16} /> 两台设备联机测试
-            </button>
-            {people.map((person) => (
-              <button
-                className="outline-button"
-                key={person}
-                onClick={() => {
-                  if (person !== active) switchPerson();
-                  setLoginOpen(false);
-                }}
-              >
-                <Avatar person={person} mini />以{person}体验
-                {person === active && <Check size={16} />}
-              </button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-      {notice && (
-        <div className="toast-message" role="status">
-          <Check size={16} />
-          {notice}
-        </div>
-      )}
-    </SidebarProvider>
-  );
-}
-function AttachmentView({
-  attachment,
-  file,
-  onRemove,
-}: {
-  attachment: MemoryAttachment;
-  file?: File;
-  onRemove?: () => void;
-}) {
-  const [url, setUrl] = useState('');
-  const [missing, setMissing] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const builtInUrl = memoryPhotoUrls[attachment.id];
-  useEffect(() => {
-    let active = true;
-    let objectUrl = '';
-    async function load() {
-      setMissing(false);
-      setUrl('');
-      if (!file && builtInUrl) {
-        setUrl(builtInUrl);
-        return;
+          pictures.push(next);
+        }
+        patch({ pictures });
+        let toSave = { ...draft, pictures };
+        if (draft.local) {
+          toSave = { ...toSave, revision: 0 };
+          const other = role === 'host' ? 'guest' : 'host';
+          toSave.notes = {
+            ...toSave.notes,
+            [role]: [toSave.notes.host, toSave.notes.guest]
+              .filter(Boolean)
+              .join('\n'),
+            [other]: '',
+          };
+        }
+        try {
+          const { entry } = await request('/api/diary/entries', toSave);
+          setEntries((es) => [entry, ...es.filter((e) => e.id !== entry.id)]);
+          setDraft(entry);
+          await localWrite('draft', entry);
+          setNotice('已保存到共同记忆，对方打开日记就能看到');
+        } catch (e) {
+          if (e instanceof Error && /更新|合并/.test(e.message)) {
+            const list = await refresh();
+            const latest = list.find((x) => x.id === draft.id);
+            if (latest) setConflict(latest);
+          }
+          throw e;
+        }
       }
-      try {
-        const blob = file ?? (await readAttachmentBlob(attachment.id));
-        if (!blob) {
-          if (active) setMissing(true);
+      setDirty(false);
+    });
+  }
+  async function exportAll() {
+    await run('export', async () => {
+      const list = allMemories.length ? allMemories : draft ? [draft] : [];
+      const copy = structuredClone(list);
+      for (const e of copy)
+        for (const p of e.pictures)
+          for (const field of ['src', 'original'] as const) {
+            if (p[field]?.startsWith('/api/')) {
+              const r = await fetch(p[field]!);
+              if (!r.ok) throw new Error('图片未能下载，导出尚未完成');
+              p[field] = await readPicture(
+                new File([await r.blob()], 'image.jpg', {
+                  type: r.headers.get('Content-Type') || 'image/jpeg',
+                }),
+              );
+            }
+          }
+      exportEntries(copy);
+      setNotice('共同记忆已导出，包含故事和上传的图片');
+    });
+  }
+  async function makePrompt(manual = false) {
+    void run(
+      'prompt',
+      async () => {
+        if (
+          !imageDraft.style.trim() ||
+          !imageDraft.scene.trim() ||
+          !imageDraft.characters.trim()
+        )
+          throw new Error('请先补充风格、画面内容和人物要求');
+        if (manual) {
+          setImageDraft((i) => ({
+            ...i,
+            step: 2,
+            prompt: [
+              i.scene,
+              `风格：${i.style}`,
+              `人物要求：${i.characters}`,
+            ].join('。'),
+          }));
           return;
         }
-        objectUrl = URL.createObjectURL(blob);
-        if (active) {
-          setUrl(objectUrl);
-          setMissing(false);
-        } else {
-          URL.revokeObjectURL(objectUrl);
-        }
-      } catch {
-        if (active) setMissing(true);
-      }
-    }
-    load();
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [attachment.id, file, builtInUrl]);
-  const icon =
-    attachment.kind === 'image' ? (
-      <ImageIcon size={18} />
-    ) : (
-      <FileText size={18} />
+        const result = await ai({
+          action: 'prompt',
+          story: draft?.story,
+          edit: !!imageDraft.source,
+          style: imageDraft.style,
+          scene: imageDraft.scene,
+          characters: imageDraft.characters,
+          size: imageDraft.size,
+        });
+        setImageDraft((i) => ({ ...i, step: 2, prompt: result.prompt }));
+      },
+      true,
     );
+  }
+  async function makeImage() {
+    void run(
+      'image',
+      async () => {
+        let input: string | undefined = imageDraft.source?.src;
+        if (input && !input.startsWith('data:')) {
+          const r = await fetch(input);
+          if (!r.ok) throw new Error('原图读取失败，请重新上传');
+          input = await readPicture(
+            new File([await r.blob()], 'source.jpg', {
+              type: r.headers.get('Content-Type') || 'image/jpeg',
+            }),
+          );
+        }
+        const result = await ai({
+          action: input ? 'edit' : 'image',
+          prompt: imageDraft.prompt,
+          size: imageDraft.size,
+          image: input,
+          confirmed: true,
+        });
+        setImageDraft((i) => ({ ...i, step: 3, result: result.image }));
+      },
+      true,
+    );
+  }
+  function acceptImage() {
+    if (!draft || !imageDraft.result) return;
+    const picture: Picture = {
+      id: crypto.randomUUID(),
+      src: imageDraft.result,
+      kind: 'generated',
+      prompt: imageDraft.prompt,
+      ...(imageDraft.source
+        ? {
+            original: imageDraft.source.original || imageDraft.source.src,
+            originalKind:
+              imageDraft.source.originalKind || imageDraft.source.kind,
+          }
+        : {}),
+    };
+    const pictures = imageDraft.source
+      ? draft.pictures.map((p) =>
+          p.id === imageDraft.source!.id ? picture : p,
+        )
+      : [...draft.pictures, picture];
+    patch({ pictures });
+    setModal(null);
+    setNotice('图片已放入草稿，保存日记后就会进入共同记忆');
+  }
+  async function connect() {
+    await run(
+      'connect',
+      async () => {
+        const s = await request('/api/beta/session', {
+          action: spaceAction,
+          displayName,
+          inviteCode,
+        });
+        setSession(s);
+        if (draft && draft.revision === 0) {
+          const other = s.member.role === 'host' ? 'guest' : 'host';
+          if (draft.notes[other])
+            patch({
+              notes: {
+                ...draft.notes,
+                [s.member.role]: [draft.notes.host, draft.notes.guest]
+                  .filter(Boolean)
+                  .join('\n'),
+                [other]: '',
+              },
+            });
+        }
+        setLocalMode(false);
+        await localWrite('localMode', false);
+        const result = await request('/api/diary/entries');
+        setEntries(result.entries);
+        setDialogError('');
+        setNotice('双人日记已连接，草稿可以保存到共同记忆');
+      },
+      true,
+    );
+  }
+  async function enableLocalMode() {
+    await run(
+      'local',
+      async () => {
+        await localWrite('localMode', true);
+        setLocalMode(true);
+        setModal(null);
+        setNotice('已切换为本机体验，日记保存在当前浏览器，不会同步给对方');
+      },
+      true,
+    );
+  }
+  async function leaveLocal() {
+    await run(
+      'connect',
+      async () => {
+        await localWrite('localMode', false);
+        setLocalMode(false);
+        if (session) await refresh();
+        setModal(null);
+        setNotice('已切换到双人日记');
+      },
+      true,
+    );
+  }
+  const shown = (showExamples ? examples : allMemories)
+    .filter((e) => (e.title + e.story + e.date).includes(query))
+    .sort((a, b) => b.date.localeCompare(a.date));
   return (
-    <div className={'memory-attachment ' + attachment.kind}>
-      {attachment.kind === 'image' && url ? (
-        <>
-          <button type="button" className="memory-photo-open" onClick={() => setExpanded(true)} aria-label={`放大查看${attachment.name}`}>
-            <img src={url} alt={attachment.name} loading="lazy" width={1536} height={1024} />
-          </button>
-          <Dialog open={expanded} onOpenChange={setExpanded}>
-            <DialogContent className="our-dialog memory-photo-dialog">
-              <DialogTitle>{attachment.name}</DialogTitle>
-              <DialogDescription>{builtInUrl ? '此间示例回忆 · AI 生成配图' : '一起留下的照片'}</DialogDescription>
-              <img src={url} alt={attachment.name} />
-            </DialogContent>
-          </Dialog>
-        </>
-      ) : (
-        <a
-          className={missing ? 'attachment-file missing' : 'attachment-file'}
-          href={url || undefined}
-          download={url ? attachment.name : undefined}
-          aria-disabled={!url}
-        >
-          {icon}
-        </a>
-      )}
-      <div className="attachment-details">
-        <strong title={attachment.name}>{attachment.name}</strong>
-        <small>
-          {builtInUrl ? '示例回忆 · AI 配图' : attachment.kind === 'video'
-            ? '已停止支持视频上传'
-            : missing
-              ? '文件仅在原设备可用'
-              : formatFileSize(attachment.size)}
-        </small>
-      </div>
-      {onRemove && (
-        <button
-          type="button"
-          className="attachment-remove"
-          aria-label={`移除${attachment.name}`}
-          onClick={onRemove}
-        >
-          <X size={15} />
-        </button>
-      )}
-    </div>
-  );
-}
-function formatTime(timestamp: number) {
-  return new Date(timestamp).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-}
-function Avatar({
-  person,
-  large,
-  mini,
-  assistant,
-}: {
-  person: Person | '此间';
-  large?: boolean;
-  mini?: boolean;
-  assistant?: boolean;
-}) {
-  return (
-    <span
-      className={
-        'avatar ' +
-        (person === '林屿' ? 'blue' : person === '此间' ? 'violet' : 'pink') +
-        (large ? ' large' : '') +
-        (mini ? ' mini' : '') +
-        (assistant ? ' assistant-avatar' : '')
-      }
+    <Tabs
+      value={tab}
+      onValueChange={(v) => setTab(String(v))}
+      className="journal"
     >
-      {person === '此间' ? <Sparkles size={15} /> : person.slice(-1)}
-      {assistant && (
-        <span className="assistant-avatar-mark" aria-hidden="true">
-          <Sparkles size={10} />
-        </span>
-      )}
-    </span>
+      <header className="journal-header">
+        <button className="wordmark" onClick={() => setTab('write')}>
+          <BookHeart />
+          此间<small>BETWEEN US</small>
+        </button>
+        <TabsList className="journal-nav">
+          <TabsTrigger value="write">
+            <Feather />
+            写日记
+          </TabsTrigger>
+          <TabsTrigger value="memories">
+            <BookOpen />
+            共同记忆
+          </TabsTrigger>
+        </TabsList>
+        <div className="header-actions">
+          <button className="people-button" onClick={() => openModal('space')}>
+            <span className="pair-mark">
+              <i>{names.host.slice(-1)}</i>
+              <i>{names.guest.slice(-1)}</i>
+            </span>
+            {localMode
+              ? '本机双人体验'
+              : session
+                ? `${session.member.displayName}的双人日记`
+                : '连接两个人'}
+          </button>
+          <button
+            className="icon-button"
+            aria-label="AI 设置"
+            title="AI 设置"
+            onClick={() => openModal('settings')}
+          >
+            <Settings2 />
+          </button>
+        </div>
+      </header>
+      <main className="journal-main">
+        {(error || notice) && (
+          <div
+            className={`inline-notice ${error ? 'error' : ''}`}
+            role={error ? 'alert' : 'status'}
+          >
+            <span>{error || notice}</span>
+            <button
+              aria-label="关闭提示"
+              onClick={() => {
+                setError('');
+                setNotice('');
+              }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+        {conflict && (
+          <div className="inline-notice error">
+            <div>
+              <p>
+                对方已更新「{conflict.title}
+                」。你的故事仍在编辑区，请比较后合并。
+              </p>
+              <details>
+                <summary>查看对方最新故事</summary>
+                <p style={{ whiteSpace: 'pre-wrap' }}>{conflict.story}</p>
+              </details>
+              <div className="conflict-actions">
+                <button
+                  className="button-secondary"
+                  onClick={() => {
+                    patch({
+                      revision: conflict.revision,
+                      notes: {
+                        ...draft!.notes,
+                        [role === 'host' ? 'guest' : 'host']:
+                          conflict.notes[role === 'host' ? 'guest' : 'host'],
+                      },
+                    });
+                    setNotice(
+                      '已同步对方片段，保留了你的故事；检查合并后再次保存',
+                    );
+                  }}
+                >
+                  保留我的故事，合并对方片段
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() => chooseEntry(conflict)}
+                >
+                  载入对方版本
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        <TabsContent value="write">
+          <div className="top-heading">
+            <div>
+              <p className="eyeline">OUR DAYS, IN OUR WORDS</p>
+              <h1>今天，我们记住什么？</h1>
+              <p>几句片段，一篇属于两个人的故事。</p>
+            </div>
+            <button
+              className="text-button"
+              onClick={() => startNew()}
+              disabled={!!busy || !ready}
+            >
+              <Plus />
+              新的一页
+            </button>
+          </div>
+          {!draft ? (
+            <div className="archive-empty">正在翻开日记…</div>
+          ) : (
+            <>
+              <div className="work-grid">
+                <section className="input-page">
+                  <div className="page-caption">
+                    <span className="step-label">
+                      <b>01</b> 留下今天的片段
+                    </span>
+                    <input
+                      className="date-input"
+                      aria-label="日记日期"
+                      type="date"
+                      value={draft.date}
+                      onChange={(e) => patch({ date: e.target.value })}
+                      disabled={!!busy}
+                    />
+                  </div>
+                  {(['host', 'guest'] as Person[]).map((p) => (
+                    <div className="fragment" key={p}>
+                      <label htmlFor={`note-${p}`}>
+                        <span className={`person-dot ${p}`}>
+                          {names[p].slice(-1)}
+                        </span>
+                        {paired
+                          ? `${names[p]}的视角`
+                          : p === 'host'
+                            ? '我记得的'
+                            : '你记得的'}
+                        <small>
+                          {p === role ? '正在写这一面' : '可以稍后补充'}
+                        </small>
+                      </label>
+                      <textarea
+                        id={`note-${p}`}
+                        rows={3}
+                        maxLength={2000}
+                        value={draft.notes[p]}
+                        disabled={!!busy || p !== role}
+                        onChange={(e) =>
+                          patch({
+                            notes: { ...draft.notes, [p]: e.target.value },
+                          })
+                        }
+                        placeholder={
+                          p === role
+                            ? '比如，周末下雨，一起煮面，面有点糊了，但我们笑了很久。'
+                            : paired
+                              ? '等对方来补充，也可以先写成故事。'
+                              : '切换到另一人的视角，补上这一天。'
+                        }
+                      />
+                      {p === role && !draft.notes[p] && (
+                        <div className="fragment-example">
+                          {['一次约会', '平凡的小事', '想念的瞬间'].map((s) => (
+                            <button
+                              className="chip"
+                              key={s}
+                              disabled={!!busy}
+                              onClick={() =>
+                                patch({
+                                  notes: { ...draft.notes, [p]: s + '，' },
+                                })
+                              }
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {p === 'guest' && !paired && (
+                        <button
+                          className="text-button"
+                          disabled={!!busy}
+                          onClick={() =>
+                            setActive((a) => (a === 'host' ? 'guest' : 'host'))
+                          }
+                        >
+                          <Users />
+                          切换到{active === 'host' ? '你' : '我'}的视角
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <div className="mode-row">
+                    <button
+                      className="mode-choice"
+                      aria-pressed={draft.mode === 'faithful'}
+                      disabled={!!busy}
+                      onClick={() => patch({ mode: 'faithful' })}
+                    >
+                      <strong>
+                        <Feather size={16} />
+                        忠实记录
+                      </strong>
+                      <small>整理经历，保留真实细节</small>
+                    </button>
+                    <button
+                      className="mode-choice"
+                      aria-pressed={draft.mode === 'creative'}
+                      disabled={!!busy}
+                      onClick={() => patch({ mode: 'creative' })}
+                    >
+                      <strong>
+                        <Sparkles size={16} />
+                        自由创作
+                      </strong>
+                      <small>加一点想象，写成小故事</small>
+                    </button>
+                  </div>
+                  <details className="reference-select">
+                    <summary>
+                      <Link2 size={15} />
+                      引用共同记忆{' '}
+                      <span>（已选 {draft.references.length}）</span>
+                    </summary>
+                    <div className="reference-options">
+                      {allMemories.filter((e) => e.id !== draft.id).length ? (
+                        allMemories
+                          .filter((e) => e.id !== draft.id)
+                          .map((e) => (
+                            <label key={e.id}>
+                              <input
+                                type="checkbox"
+                                disabled={
+                                  !!busy ||
+                                  (!draft.references.includes(e.id) &&
+                                    draft.references.length >= 10)
+                                }
+                                checked={draft.references.includes(e.id)}
+                                onChange={(ev) =>
+                                  patch({
+                                    references: ev.target.checked
+                                      ? [...draft.references, e.id]
+                                      : draft.references.filter(
+                                          (id) => id !== e.id,
+                                        ),
+                                  })
+                                }
+                              />
+                              {e.title}
+                            </label>
+                          ))
+                      ) : (
+                        <p>保存第一篇日记后，就能在这里选择引用。</p>
+                      )}
+                    </div>
+                  </details>
+                  <button
+                    className="button-primary wide"
+                    disabled={
+                      !!busy ||
+                      (!draft.notes.host.trim() && !draft.notes.guest.trim())
+                    }
+                    onClick={() => generateStory()}
+                  >
+                    {busy === 'story' ? (
+                      <Busy>正在写我们的故事…</Busy>
+                    ) : (
+                      <>
+                        <Sparkles />
+                        {draft.story ? '重新生成故事' : '写成我们的故事'}
+                      </>
+                    )}
+                  </button>
+                  <p className="help-note">
+                    生成后可自由编辑 · 也可以在右页直接写
+                  </p>
+                </section>
+                <section className="story-page">
+                  <div className="page-caption">
+                    <span className="step-label">
+                      <b>02</b> 我们的故事
+                    </span>
+                    <span className="badge">
+                      {draft.mode === 'creative' ? '含想象创作' : '忠实记录'}
+                    </span>
+                  </div>
+                  {!draft.story && !draft.title ? (
+                    <div className="paper-empty">
+                      <p className="quote">
+                        那些很小的事，
+                        <br />
+                        也值得有一页。
+                      </p>
+                      <p>从左边的几句话开始，或自己写下故事。</p>
+                      <figure className="sample-peek">
+                        <img
+                          src="/memories/rainy-noodles.jpg"
+                          alt="雨天面馆里两个人的面碗，示例配图"
+                        />
+                        <figcaption>
+                          雨没停，面已经吃完了<small>示例 · AI 配图</small>
+                        </figcaption>
+                      </figure>
+                      <div className="empty-try">
+                        <button
+                          className="text-button"
+                          disabled={!!busy}
+                          onClick={() => chooseEntry(examples[0])}
+                        >
+                          翻看这一篇示例 <ArrowUpRight />
+                        </button>
+                      </div>
+                      <button
+                        className="button-secondary"
+                        disabled={!!busy}
+                        onClick={() => patch({ title: '今天的小事' })}
+                      >
+                        <PenLine />
+                        我想自己写
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        className="story-title"
+                        aria-label="故事标题"
+                        value={draft.title}
+                        placeholder="给今天起个名字"
+                        maxLength={100}
+                        disabled={!!busy}
+                        onChange={(e) => patch({ title: e.target.value })}
+                      />
+                      <textarea
+                        className="story-text"
+                        aria-label="故事正文"
+                        value={draft.story}
+                        placeholder="这一页由你开始。写下今天的故事，也可以让 AI 帮你整理左边的片段。"
+                        maxLength={15000}
+                        disabled={!!busy}
+                        onChange={(e) => patch({ story: e.target.value })}
+                      />
+                      <div className="story-meta">
+                        <span>可直接编辑</span>
+                        <span>
+                          {draft.story.length} 字{' '}
+                          {history.length > 0 && (
+                            <button
+                              className="text-button"
+                              onClick={() => openModal('history')}
+                              disabled={!!busy}
+                            >
+                              <History size={13} />
+                              上一版
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {draft.pictures.length > 0 && (
+                    <div className="image-strip">
+                      {draft.pictures.map((p) => (
+                        <article className="picture-card" key={p.id}>
+                          <img
+                            src={p.src}
+                            alt={
+                              p.kind === 'generated' ? '故事配图' : '日记照片'
+                            }
+                          />
+                          <button
+                            className="remove-picture"
+                            aria-label="从日记移除图片"
+                            disabled={!!busy}
+                            onClick={() =>
+                              patch({
+                                pictures: draft.pictures.filter(
+                                  (x) => x.id !== p.id,
+                                ),
+                              })
+                            }
+                          >
+                            <X size={13} />
+                          </button>
+                          <footer>
+                            <span>
+                              {p.kind === 'generated' ? 'AI 配图' : '我的照片'}
+                            </span>
+                            <button
+                              className="text-button"
+                              onClick={() => openImage(p)}
+                              disabled={!!busy}
+                            >
+                              <WandSparkles size={13} />
+                              改图
+                            </button>
+                            {p.original && (
+                              <button
+                                className="text-button"
+                                disabled={!!busy}
+                                onClick={() =>
+                                  patch({
+                                    pictures: draft.pictures.map((x) =>
+                                      x.id === p.id
+                                        ? {
+                                            ...x,
+                                            src: p.original!,
+                                            original: undefined,
+                                            kind: p.originalKind || 'uploaded',
+                                            originalKind: undefined,
+                                            prompt: '',
+                                          }
+                                        : x,
+                                    ),
+                                  })
+                                }
+                              >
+                                恢复原图
+                              </button>
+                            )}
+                          </footer>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                  <div className="story-toolbar">
+                    <div className="story-tools">
+                      <button
+                        className="text-button"
+                        disabled={
+                          !!busy ||
+                          !draft.story.trim() ||
+                          draft.pictures.length >= 6
+                        }
+                        onClick={() => openImage()}
+                      >
+                        <ImagePlus />
+                        为故事配图
+                      </button>
+                      <button
+                        className="text-button"
+                        disabled={!!busy || draft.pictures.length >= 6}
+                        onClick={() => uploadRef.current?.click()}
+                      >
+                        <Upload />
+                        放一张照片
+                      </button>
+                    </div>
+                    <button
+                      className="button-primary"
+                      disabled={
+                        !!busy || !draft.title.trim() || !draft.story.trim()
+                      }
+                      onClick={() => void save()}
+                    >
+                      {busy === 'save' ? (
+                        <Busy>正在保存</Busy>
+                      ) : (
+                        <>
+                          <BookHeart />
+                          存入共同记忆
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <input
+                    ref={uploadRef}
+                    className="sr-file"
+                    aria-label="上传日记照片"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => {
+                      void addFile(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="help-note paste-target"
+                    aria-label="粘贴照片区域"
+                    onPaste={(e) => {
+                      const file = Array.from(e.clipboardData.files)[0];
+                      if (file) {
+                        e.preventDefault();
+                        void addFile(file);
+                      }
+                    }}
+                  >
+                    也可以点击这里，粘贴剪贴板里的照片
+                  </button>
+                </section>
+              </div>
+              <div className="below-book">
+                <p>
+                  {localMode ? <HardDrive size={14} /> : <Cloud size={14} />}{' '}
+                  {localMode
+                    ? '本机体验 · 两人可切换视角，尚未跨设备同步'
+                    : session
+                      ? '双人日记 · 保存后同步给彼此'
+                      : '草稿先留在本机，连接两个人后保存到共同记忆'}
+                </p>
+                <span className="draft-status" aria-live="polite">
+                  {draftStatus}
+                </span>
+              </div>
+            </>
+          )}
+        </TabsContent>
+        <TabsContent value="memories">
+          <div className="top-heading">
+            <div>
+              <p className="eyeline">THE DAYS WE KEEP</p>
+              <h1>把我们的日子，收在这里。</h1>
+              <p>一起写过的故事，都有迹可循。</p>
+            </div>
+            <button
+              className="text-button"
+              disabled={!!busy}
+              onClick={() => startNew()}
+            >
+              <Plus />
+              写一篇日记
+            </button>
+          </div>
+          <div className="memory-controls">
+            <input
+              aria-label="搜索共同记忆"
+              placeholder="搜索故事、关键词或日期"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <span className="counts">
+              {shown.length} 篇{showExamples ? '示例' : '记忆'}
+            </span>
+            <div className="story-tools">
+              <button
+                className="text-button"
+                onClick={() => setShowExamples((s) => !s)}
+              >
+                {showExamples ? '回到我们的记忆' : '看看示例'}
+              </button>
+              {session && !localMode && (
+                <button
+                  className="text-button"
+                  disabled={!!busy}
+                  onClick={() =>
+                    void run('refresh', async () => {
+                      await refresh();
+                      setNotice('共同记忆已刷新');
+                    })
+                  }
+                >
+                  <RefreshCw />
+                  刷新
+                </button>
+              )}
+              <button
+                className="text-button"
+                disabled={!!busy || !allMemories.length}
+                onClick={() => void exportAll()}
+              >
+                <Download />
+                导出
+              </button>
+            </div>
+          </div>
+          {shown.length ? (
+            <div className="memory-grid">
+              {shown.map((e) => (
+                <button
+                  className="memory-card"
+                  key={e.id}
+                  onClick={() => chooseEntry(e)}
+                  disabled={!!busy}
+                >
+                  {e.pictures[0] ? (
+                    <img src={e.pictures[0].src} alt={e.title} loading="lazy" />
+                  ) : (
+                    <div className="memory-text-cover">
+                      <BookOpen size={43} strokeWidth={1} />
+                    </div>
+                  )}
+                  <div className="memory-content">
+                    <div className="memory-date">
+                      <span>{e.date.replaceAll('-', ' . ')}</span>
+                      <span>
+                        {e.sample
+                          ? '示例故事'
+                          : e.local
+                            ? '本机记忆'
+                            : e.mode === 'creative'
+                              ? '自由创作'
+                              : '忠实记录'}
+                      </span>
+                    </div>
+                    <h2>{e.title}</h2>
+                    <p>{e.story}</p>
+                    <div className="memory-foot">
+                      <span>
+                        {e.notes.host && e.notes.guest
+                          ? '两个人的片段'
+                          : '等另一段记忆'}
+                        {e.pictures[0]?.kind === 'generated'
+                          ? ' · AI 配图'
+                          : ''}
+                      </span>
+                      <ArrowUpRight size={16} />
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="archive-empty">
+              <h2>
+                {query ? '还没找到这一段回忆' : '第一篇故事，等你们来写。'}
+              </h2>
+              <p>
+                {query
+                  ? '换个关键词，或者清空搜索看看。'
+                  : '一个片段就可以开始，另一人随后补充。'}
+              </p>
+              <button
+                className="button-secondary"
+                onClick={() => (query ? setQuery('') : setShowExamples(true))}
+              >
+                {query ? '清空搜索' : '先翻翻示例日记'}
+              </button>
+            </div>
+          )}
+        </TabsContent>
+      </main>
+      <Dialog
+        open={modal !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setModal(null);
+        }}
+      >
+        <DialogContent className="journal-dialog" showCloseButton={!busy}>
+          {modal === 'settings' && (
+            <>
+              <DialogTitle>连接你的 AI</DialogTitle>
+              <DialogDescription className="dialog-intro">
+                故事、提示词和图片使用同一个 OpenAI
+                服务。密钥只留在当前页面内存，刷新后需重新填写。
+              </DialogDescription>
+              <div className="dialog-fields">
+                {configured && (
+                  <div className="status-card">
+                    已配置站点 AI
+                    服务。连接双人日记后可使用，也可填写自己的密钥。
+                  </div>
+                )}
+                <label className="field">
+                  API Key
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={key}
+                    placeholder="填写你的 API Key"
+                    onChange={(e) => setKey(e.target.value)}
+                  />
+                </label>
+                <div className="two-fields">
+                  <label className="field">
+                    写作模型
+                    <input
+                      value={textModel}
+                      onChange={(e) => setTextModel(e.target.value)}
+                      maxLength={120}
+                    />
+                  </label>
+                  <label className="field">
+                    图片模型
+                    <input
+                      value={imageModel}
+                      onChange={(e) => setImageModel(e.target.value)}
+                      maxLength={120}
+                    />
+                  </label>
+                </div>
+                <p className="help-note">
+                  生成时将发送当前片段、选中的记忆或原图。用量计入所用服务账户。
+                </p>
+                {offline && (
+                  <div className="status-card">
+                    离线文件可写日记和上传照片。AI
+                    生成与跨设备同步需打开在线版本。
+                  </div>
+                )}
+              </div>
+              <div className="dialog-actions">
+                <button className="text-button" onClick={() => setKey('')}>
+                  清除密钥
+                </button>
+                <button
+                  className="button-primary"
+                  onClick={() => {
+                    setModal(null);
+                    setNotice(
+                      key ? '模型设置已应用，生成时将验证连接' : '设置已应用',
+                    );
+                  }}
+                >
+                  应用设置
+                </button>
+              </div>
+            </>
+          )}
+          {modal === 'space' && (
+            <>
+              <DialogTitle>
+                {session ? '我们的双人日记' : '连接两个人的一本日记'}
+              </DialogTitle>
+              <DialogDescription className="dialog-intro">
+                一个人先创建，另一个人用邀请码加入。每人补充自己的片段，故事与图片共同编辑。
+              </DialogDescription>
+              {session ? (
+                <div className="dialog-fields">
+                  <div className="status-card">
+                    <p>
+                      {session.member.displayName} ＆{' '}
+                      {session.partner?.displayName || '等待另一人加入'}
+                    </p>
+                    <p>这本日记的邀请码</p>
+                    <div className="invite-code">
+                      {session.space.inviteCode}
+                    </div>
+                    <button
+                      className="text-button"
+                      onClick={() =>
+                        void run(
+                          'copy',
+                          async () => {
+                            await navigator.clipboard.writeText(
+                              session.space.inviteCode,
+                            );
+                            setNotice('邀请码已复制');
+                          },
+                          true,
+                        )
+                      }
+                    >
+                      复制邀请码
+                    </button>
+                    <p>对方还需有此网站的访问权限。</p>
+                  </div>
+                  {localMode ? (
+                    <button
+                      className="button-primary"
+                      onClick={() => void leaveLocal()}
+                      disabled={!!busy}
+                    >
+                      回到云端双人日记
+                    </button>
+                  ) : (
+                    <button
+                      className="button-primary"
+                      onClick={() => setModal(null)}
+                    >
+                      继续写日记
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="dialog-fields">
+                  <div className="style-choices">
+                    <button
+                      aria-pressed={spaceAction === 'create'}
+                      onClick={() => setSpaceAction('create')}
+                      disabled={!!busy}
+                    >
+                      创建一本
+                    </button>
+                    <button
+                      aria-pressed={spaceAction === 'join'}
+                      onClick={() => setSpaceAction('join')}
+                      disabled={!!busy}
+                    >
+                      加入对方
+                    </button>
+                  </div>
+                  <label className="field">
+                    你的称呼
+                    <input
+                      maxLength={20}
+                      value={displayName}
+                      placeholder="让对方怎么称呼你"
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      disabled={!!busy}
+                    />
+                  </label>
+                  {spaceAction === 'join' && (
+                    <label className="field">
+                      对方的邀请码
+                      <input
+                        value={inviteCode}
+                        maxLength={6}
+                        placeholder="6 位邀请码"
+                        onChange={(e) =>
+                          setInviteCode(e.target.value.toUpperCase())
+                        }
+                        disabled={!!busy}
+                      />
+                    </label>
+                  )}
+                  <button
+                    className="button-primary"
+                    disabled={
+                      !!busy ||
+                      offline ||
+                      !displayName.trim() ||
+                      (spaceAction === 'join' && inviteCode.length !== 6)
+                    }
+                    onClick={() => void connect()}
+                  >
+                    {busy === 'connect' ? (
+                      <Busy>正在连接</Busy>
+                    ) : spaceAction === 'create' ? (
+                      '创建双人日记'
+                    ) : (
+                      '加入双人日记'
+                    )}
+                  </button>
+                </div>
+              )}
+              <hr className="hint-divider" />
+              <button
+                className="text-button"
+                disabled={!!busy}
+                onClick={() => void enableLocalMode()}
+              >
+                <HardDrive />
+                仅在本机体验
+              </button>
+              <p className="help-note">
+                本机体验支持切换双方视角，记录不会同步到其他设备。
+              </p>
+            </>
+          )}
+          {modal === 'image' && (
+            <>
+              <DialogTitle>
+                {imageDraft.source
+                  ? '给照片一点新模样'
+                  : '给这一页，配一幅画。'}
+              </DialogTitle>
+              <DialogDescription className="dialog-intro">
+                先说清你想要的画面，再生成。
+                {imageDraft.source
+                  ? '原图会保留，可以随时恢复。'
+                  : '喜欢的图片再放进日记。'}
+              </DialogDescription>
+              <div className="image-steps">
+                <span className={imageDraft.step === 1 ? 'active' : ''}>
+                  01 确认画面
+                </span>
+                <span>／</span>
+                <span className={imageDraft.step === 2 ? 'active' : ''}>
+                  02 编辑提示词
+                </span>
+                <span>／</span>
+                <span className={imageDraft.step === 3 ? 'active' : ''}>
+                  03 选择图片
+                </span>
+              </div>
+              {imageDraft.source && (
+                <div className="source-thumb">
+                  <img src={imageDraft.source.src} alt="待修改的原图" />
+                  <div>
+                    以这张照片为基础<p>可以改风格、局部内容或添加静态特效</p>
+                  </div>
+                </div>
+              )}
+              <fieldset className="dialog-fieldset" disabled={!!busy}>
+                {imageDraft.step === 1 && (
+                  <>
+                    <div className="dialog-fields">
+                      <div className="field">
+                        <span>你想要哪种风格？</span>
+                        <div className="style-choices">
+                          {['胶片摄影', '水彩手绘', '日系漫画', '复古拼贴'].map(
+                            (s) => (
+                              <button
+                                key={s}
+                                aria-pressed={imageDraft.style === s}
+                                onClick={() =>
+                                  setImageDraft((i) => ({ ...i, style: s }))
+                                }
+                              >
+                                {s}
+                              </button>
+                            ),
+                          )}
+                        </div>
+                        <input
+                          aria-label="自定义图片风格"
+                          placeholder="也可以自己描述风格"
+                          value={imageDraft.style}
+                          onChange={(e) =>
+                            setImageDraft((i) => ({
+                              ...i,
+                              style: e.target.value,
+                            }))
+                          }
+                          maxLength={300}
+                        />
+                      </div>
+                      <label className="field">
+                        {imageDraft.source
+                          ? '你想怎么修改？'
+                          : '最想画下哪一幕？'}
+                        <textarea
+                          value={imageDraft.scene}
+                          onChange={(e) =>
+                            setImageDraft((i) => ({
+                              ...i,
+                              scene: e.target.value,
+                            }))
+                          }
+                          maxLength={1000}
+                          placeholder="比如，两人坐在面馆窗边，窗外下着雨"
+                        />
+                      </label>
+                      {imageDraft.source && (
+                        <div className="style-choices">
+                          {[
+                            '加入轻微胶片颗粒与暖光',
+                            '背景增加柔和光斑，保留人物',
+                            '改成水彩画，保留人物动作',
+                          ].map((s) => (
+                            <button
+                              key={s}
+                              onClick={() =>
+                                setImageDraft((i) => ({ ...i, scene: s }))
+                              }
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <label className="field">
+                        人物有哪些需要保留的细节？
+                        <textarea
+                          value={imageDraft.characters}
+                          onChange={(e) =>
+                            setImageDraft((i) => ({
+                              ...i,
+                              characters: e.target.value,
+                            }))
+                          }
+                          maxLength={1000}
+                          placeholder="发型、衣服、动作，或不展示正脸"
+                        />
+                      </label>
+                      <label className="field">
+                        画面比例
+                        <select
+                          value={imageDraft.size}
+                          onChange={(e) =>
+                            setImageDraft((i) => ({
+                              ...i,
+                              size: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="1536x1024">横幅 · 3:2</option>
+                          <option value="1024x1024">方形 · 1:1</option>
+                          <option value="1024x1536">竖幅 · 2:3</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="dialog-actions">
+                      <button
+                        className="text-button"
+                        onClick={() => void makePrompt(true)}
+                      >
+                        我自己写提示词
+                      </button>
+                      <button
+                        className="button-primary"
+                        onClick={() => void makePrompt()}
+                      >
+                        {busy === 'prompt' ? (
+                          <Busy>正在整理画面</Busy>
+                        ) : (
+                          <>
+                            <Sparkles />
+                            生成配图提示词
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </>
+                )}
+                {imageDraft.step === 2 && (
+                  <>
+                    <label className="field">
+                      这一段将用于{imageDraft.source ? '修改照片' : '生成图片'}
+                      <textarea
+                        aria-label="图片提示词"
+                        style={{ minHeight: 200 }}
+                        value={imageDraft.prompt}
+                        maxLength={6000}
+                        onChange={(e) =>
+                          setImageDraft((i) => ({
+                            ...i,
+                            prompt: e.target.value,
+                          }))
+                        }
+                      />
+                      <small>
+                        {imageDraft.style} ·{' '}
+                        {imageDraft.size === '1536x1024'
+                          ? '横幅 3:2'
+                          : imageDraft.size === '1024x1024'
+                            ? '方形 1:1'
+                            : '竖幅 2:3'}{' '}
+                        · 可自由修改提示词
+                      </small>
+                    </label>
+                    <div className="dialog-actions">
+                      <button
+                        className="text-button"
+                        onClick={() =>
+                          setImageDraft((i) => ({ ...i, step: 1 }))
+                        }
+                      >
+                        返回澄清
+                      </button>
+                      <button
+                        className="button-primary"
+                        disabled={!imageDraft.prompt.trim()}
+                        onClick={() => void makeImage()}
+                      >
+                        {busy === 'image' ? (
+                          <Busy>画面正在生成…</Busy>
+                        ) : (
+                          <>
+                            <WandSparkles />
+                            确认并{imageDraft.source ? '改图' : '生图'}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <p className="help-note">
+                      图片可能需要一两分钟。生成后先预览，再决定是否使用。
+                    </p>
+                  </>
+                )}
+                {imageDraft.step === 3 && (
+                  <>
+                    <img
+                      className="result-image"
+                      src={imageDraft.result}
+                      alt="本次 AI 生成的图片"
+                    />
+                    <div className="dialog-actions">
+                      <button
+                        className="text-button"
+                        onClick={() =>
+                          setImageDraft((i) => ({ ...i, step: 2 }))
+                        }
+                      >
+                        调整提示词再生成
+                      </button>
+                      <a
+                        className="file-download"
+                        href={imageDraft.result}
+                        download="此间-故事配图.jpg"
+                      >
+                        下载图片
+                      </a>
+                      <button className="button-primary" onClick={acceptImage}>
+                        <Check />
+                        用这张，放进日记
+                      </button>
+                    </div>
+                  </>
+                )}
+              </fieldset>
+              {busy === 'image' && (
+                <button
+                  className="text-button"
+                  onClick={() => abortRef.current?.abort()}
+                >
+                  停止等待
+                </button>
+              )}
+            </>
+          )}
+          {modal === 'history' && (
+            <>
+              <DialogTitle>刚才的故事版本</DialogTitle>
+              <DialogDescription>
+                恢复旧版本前，会把当前版本也留在这里。版本记录保留到离开当前日记。
+              </DialogDescription>
+              <div className="history-list">
+                {history.map((h, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      const current = {
+                        title: draft!.title,
+                        story: draft!.story,
+                      };
+                      patch(h);
+                      setHistory((all) =>
+                        [current, ...all.filter((_, j) => j !== i)].slice(0, 6),
+                      );
+                      setModal(null);
+                    }}
+                  >
+                    恢复「{h.title}」<p>{h.story.slice(0, 80)}…</p>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {modal === 'replace' && (
+            <>
+              <DialogTitle>先收好正在写的这一页</DialogTitle>
+              <DialogDescription>
+                打开另一篇会替换当前编辑区。可以先导出草稿留底，或返回保存到共同记忆。
+              </DialogDescription>
+              <div className="dialog-actions">
+                <button
+                  className="text-button"
+                  onClick={() => draft && exportEntries([draft])}
+                >
+                  导出当前草稿
+                </button>
+                <button
+                  className="button-secondary"
+                  onClick={() => setModal(null)}
+                >
+                  返回继续写
+                </button>
+                <button
+                  className="button-primary"
+                  onClick={() => pendingEntry && loadEntry(pendingEntry)}
+                >
+                  替换并打开
+                </button>
+              </div>
+            </>
+          )}
+          {dialogError && (
+            <div className="dialog-error" role="alert">
+              {dialogError}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Tabs>
   );
 }
