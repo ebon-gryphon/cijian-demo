@@ -125,7 +125,7 @@ test('image editing sends original bytes and chosen prompt to edits API', async 
   );
   assert.match(url, /images\/edits$/);
   assert.equal(body.get('prompt'), '保留人物，水彩风');
-  assert.equal(await body.get('image[]').text(), 'hello');
+  assert.equal(await body.get('image').text(), 'hello');
   assert.equal(body.get('size'), '1024x1024');
   assert.equal(result.image, 'data:image/jpeg;base64,aW1hZ2U=');
 });
@@ -327,4 +327,164 @@ test('server credentials cannot be redirected and arbitrary proxy targets are re
     'https://example.com/v1?key=secret',
   ])
     assert.throws(() => normalizeApiBaseUrl(url));
+});
+
+test('compatible image service uses portable fields and preserves PNG', async () => {
+  const result = await generateJournal(
+    { action: 'image', prompt: '山', confirmed: true },
+    'image-key',
+    { ...models, baseUrl: 'https://pictures.example/v1' },
+    async (url, init) => {
+      assert.equal(url, 'https://pictures.example/v1/images/generations');
+      const body = JSON.parse(init.body);
+      assert.equal(body.response_format, 'b64_json');
+      assert.equal(body.output_format, undefined);
+      assert.equal(body.quality, undefined);
+      return Response.json({ data: [{ b64_json: 'iVBORw0KGgo=' }] });
+    },
+  );
+  assert.equal(result.image, 'data:image/png;base64,iVBORw0KGgo=');
+});
+test('Gemini image generation and editing use native image protocol', async () => {
+  for (const action of ['image', 'edit']) {
+    const result = await generateJournal(
+      {
+        action,
+        prompt: '山',
+        confirmed: true,
+        image: 'data:image/png;base64,aGVsbG8=',
+      },
+      'google-key',
+      {
+        ...models,
+        imageProtocol: 'gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+      },
+      async (url, init) => {
+        assert.match(url, /models\/image-model:generateContent$/);
+        assert.equal(init.headers['x-goog-api-key'], 'google-key');
+        assert.equal(init.headers.Authorization, undefined);
+        const body = JSON.parse(init.body);
+        assert.deepEqual(body.generationConfig.responseModalities, [
+          'TEXT',
+          'IMAGE',
+        ]);
+        assert.equal(body.contents[0].parts.length, action === 'edit' ? 2 : 1);
+        if (action === 'edit')
+          assert.equal(body.contents[0].parts[1].inlineData.data, 'aGVsbG8=');
+        return Response.json({
+          candidates: [
+            {
+              finishReason: 'STOP',
+              content: {
+                parts: [
+                  { inlineData: { mimeType: 'image/png', data: 'aGVsbG8=' } },
+                ],
+              },
+            },
+          ],
+        });
+      },
+    );
+    assert.match(result.image, /^data:image\/png/);
+  }
+});
+test('Seedream edits use JSON reference image and never OpenAI edit fields', async () => {
+  await generateJournal(
+    {
+      action: 'edit',
+      prompt: '山',
+      confirmed: true,
+      image: 'data:image/png;base64,aGVsbG8=',
+    },
+    'ark-key',
+    {
+      ...models,
+      imageProtocol: 'seedream',
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    },
+    async (url, init) => {
+      assert.match(url, /images\/generations$/);
+      const body = JSON.parse(init.body);
+      assert.equal(body.image, 'data:image/png;base64,aGVsbG8=');
+      assert.equal(body.size, '2496x1664');
+      assert.equal(body.output_format, undefined);
+      return Response.json({ data: [{ b64_json: 'aGVsbG8=' }] });
+    },
+  );
+});
+test('image URLs stay client-side and unsafe locations are rejected', async () => {
+  const body = { action: 'image', prompt: '山', confirmed: true };
+  let calls = 0;
+  const result = await generateJournal(body, 'key', models, async () => {
+    calls++;
+    return Response.json({
+      data: [{ url: 'https://cdn.example/image.png?signature=abc' }],
+    });
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.imageUrl, 'https://cdn.example/image.png?signature=abc');
+  await assert.rejects(
+    generateJournal(body, 'key', models, async () =>
+      Response.json({ data: [{ url: 'http://127.0.0.1/private' }] }),
+    ),
+    /地址/,
+  );
+});
+test('invalid provider JSON gives a specific error without exposing response', async () => {
+  await assert.rejects(
+    generateJournal(
+      { action: 'test' },
+      'key',
+      models,
+      async () => new Response('<html>secret</html>'),
+    ),
+    /无法解析/,
+  );
+});
+
+test('server image protocol comes from the selected image connection', () => {
+  const image = resolveAIConnection(
+    {
+      action: 'image',
+      imageProtocol: 'openai',
+      apiBaseUrl: 'https://evil.example/v1',
+    },
+    {
+      DIARY_IMAGE_API_BASE_URL:
+        'https://generativelanguage.googleapis.com/v1beta',
+      DIARY_IMAGE_API_PROTOCOL: 'gemini',
+      DIARY_IMAGE_API_KEY: 'server-image',
+      DIARY_IMAGE_MODEL: 'image-model',
+    },
+  );
+  assert.equal(image.models.imageProtocol, 'gemini');
+  assert.equal(
+    image.models.baseUrl,
+    'https://generativelanguage.googleapis.com/v1beta',
+  );
+  const supplied = resolveAIConnection(
+    {
+      action: 'image',
+      key: 'ark-test',
+      imageProtocol: 'seedream',
+      imageModel: 'ep-test',
+      apiBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    },
+    {},
+  );
+  assert.equal(supplied.models.imageProtocol, 'seedream');
+  assert.throws(
+    () =>
+      resolveAIConnection(
+        {
+          action: 'image',
+          key: 'key',
+          imageProtocol: 'unknown',
+          imageModel: 'model',
+        },
+        {},
+      ),
+    /协议/,
+  );
 });

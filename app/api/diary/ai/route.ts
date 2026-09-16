@@ -11,7 +11,7 @@ import {
   normalizeApiBaseUrl,
 } from '@/app/journal-ai';
 import { proxyBases, resolveAIConnection } from '@/app/ai-server-config';
-import { textProtocol } from '@/app/ai-connections';
+import { imageProtocol, textProtocol } from '@/app/ai-connections';
 const headers = { 'Cache-Control': 'no-store' };
 export async function GET() {
   return Response.json(
@@ -28,6 +28,7 @@ export async function GET() {
       protocol: textProtocol(env.DIARY_API_PROTOCOL),
       proxyBases: proxyBases(env),
       textModel: env.DIARY_TEXT_MODEL || 'gpt-5-mini',
+      imageProtocol: imageProtocol(env.DIARY_IMAGE_API_PROTOCOL),
       imageModel: env.DIARY_IMAGE_MODEL || 'gpt-image-2',
     },
     { headers },

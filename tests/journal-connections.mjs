@@ -62,6 +62,7 @@ try {
   await page.screenshot({ path: '/tmp/cijian-ai-settings-fixed.png', fullPage: true });
   await page.getByRole('button', { name: '应用设置', exact: true }).click();
   await page.reload();
+  await page.getByRole('textbox', {name: '故事正文', exact: true}).waitFor();
   await page.getByRole('button', { name: 'AI 设置', exact: true }).click();
   assert.equal(await page.getByLabel('API Key', { exact: true }).inputValue(), '');
   await page.getByText('配图服务（可选，单独配置）', { exact: true }).click();

@@ -1,4 +1,9 @@
-import { textProtocol, type TextProtocol } from './ai-connections';
+import {
+  imageProtocol,
+  textProtocol,
+  type ImageProtocol,
+  type TextProtocol,
+} from './ai-connections';
 import { storyMessages } from './journal-model';
 export class AIError extends Error {
   constructor(
@@ -14,6 +19,7 @@ type JournalResult = {
   story?: string;
   prompt?: string;
   image?: string;
+  imageUrl?: string;
   connected?: boolean;
 };
 function record(v: unknown): Input {
@@ -61,6 +67,7 @@ export async function generateJournal(
     image: string;
     baseUrl?: string;
     protocol?: TextProtocol;
+    imageProtocol?: ImageProtocol;
   },
   fetcher: typeof fetch = fetch,
   signal?: AbortSignal,
@@ -76,8 +83,8 @@ export async function generateJournal(
   const imageAction = action === 'image' || action === 'edit';
   if (!imageAction && !models.text.trim())
     throw new AIError('请填写服务商提供的写作模型名称');
-  if (imageAction && protocol !== 'openai')
-    throw new AIError('请在 AI 设置中单独配置支持图片接口的服务');
+  const pictureProtocol = imageProtocol(models.imageProtocol);
+  const gptImage = official && models.image.startsWith('gpt-image');
   if (imageAction && !models.image.trim())
     throw new AIError('请填写图片模型名称');
   const timeout = AbortSignal.timeout(imageAction ? 180000 : 60000);
@@ -101,8 +108,9 @@ export async function generateJournal(
       model: models.image,
       prompt,
       size,
-      quality: 'medium',
-      output_format: 'jpeg',
+      ...(gptImage
+        ? { quality: 'medium', output_format: 'jpeg' }
+        : { response_format: 'b64_json' }),
       n: 1,
     };
     if (action === 'edit') {
@@ -118,7 +126,7 @@ export async function generateJournal(
       const form = new FormData();
       Object.entries(data).forEach(([k, v]) => form.append(k, String(v)));
       form.append(
-        'image[]',
+        gptImage ? 'image[]' : 'image',
         new Blob([bytes], { type: match[1] }),
         'reference.' + match[1].split('/')[1],
       );
@@ -131,6 +139,53 @@ export async function generateJournal(
       };
       options.body = JSON.stringify(data);
       endpoint = `${baseUrl}/images/generations`;
+    }
+    if (pictureProtocol === 'gemini') {
+      const parts: Input[] = [{ text: prompt }];
+      if (action === 'edit') {
+        const match = String(body.image).match(
+          /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/,
+        )!;
+        parts.push({ inlineData: { mimeType: match[1], data: match[2] } });
+      }
+      endpoint = `${baseUrl}/models/${encodeURIComponent(models.image.replace(/^models\//, ''))}:generateContent`;
+      options.headers = {
+        'x-goog-api-key': key,
+        'Content-Type': 'application/json',
+      };
+      options.body = JSON.stringify({
+        contents: [{ role: 'user', parts }],
+        generationConfig: {
+          responseModalities: ['TEXT', 'IMAGE'],
+          imageConfig: {
+            aspectRatio:
+              size === '1024x1024'
+                ? '1:1'
+                : size === '1024x1536'
+                  ? '2:3'
+                  : '3:2',
+          },
+        },
+      });
+    } else if (pictureProtocol === 'seedream') {
+      endpoint = `${baseUrl}/images/generations`;
+      options.headers = {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      };
+      options.body = JSON.stringify({
+        model: models.image,
+        prompt,
+        response_format: 'b64_json',
+        size:
+          size === '1024x1024'
+            ? '2048x2048'
+            : size === '1024x1536'
+              ? '1664x2496'
+              : '2496x1664',
+        sequential_image_generation: 'disabled',
+        ...(action === 'edit' ? { image: body.image } : {}),
+      });
     }
   } else {
     const notes = {
@@ -229,7 +284,18 @@ export async function generateJournal(
     }
   }
 
-  const response = await fetcher(endpoint, options);
+  let response: Response;
+  try {
+    response = await fetcher(endpoint, options);
+  } catch (error) {
+    if (options.signal?.aborted) throw options.signal.reason;
+    if (error instanceof TypeError)
+      throw new AIError(
+        '无法连接模型服务，请核对 API 地址、网络及服务可用性；浏览器直连还需服务允许跨域访问',
+        502,
+      );
+    throw error;
+  }
   if (!response.ok) {
     if ([401, 403].includes(response.status))
       throw new AIError('密钥无效或没有所选模型的权限，请检查 AI 设置', 401);
@@ -244,20 +310,67 @@ export async function generateJournal(
       throw new AIError('服务商未接受请求参数，请核对接口协议与模型名称', 502);
     throw new AIError('模型服务未能完成请求，请检查模型设置后重试', 502);
   }
-  const data = (await response.json()) as Input;
-  if (imageAction) {
-    const b64 = record(
-      Array.isArray(data.data) ? data.data[0] : undefined,
-    ).b64_json;
-    if (
-      typeof b64 !== 'string' ||
-      !b64 ||
-      b64.length > 11200000 ||
-      !/^[A-Za-z0-9+/=]+$/.test(b64)
-    )
-      throw new AIError('图片没有完整返回，请重试', 502);
-    return { image: `data:image/jpeg;base64,${b64}` };
+  let data: Input;
+  try {
+    data = record(await response.json());
+  } catch {
+    throw new AIError('服务返回了无法解析的数据，请核对接口地址与协议', 502);
   }
+  if (imageAction) {
+    let image = record(Array.isArray(data.data) ? data.data[0] : undefined);
+    let mime: unknown;
+    if (pictureProtocol === 'gemini') {
+      const candidate = record(
+        Array.isArray(data.candidates) ? data.candidates[0] : undefined,
+      );
+      if (candidate.finishReason && candidate.finishReason !== 'STOP')
+        throw new AIError(
+          '图片生成未完成或被服务拦截，请调整提示词后重试',
+          502,
+        );
+      const parts = record(candidate.content).parts;
+      const part = Array.isArray(parts)
+        ? parts.find((p: Input) => !p.thought && record(p.inlineData).data)
+        : undefined;
+      const inline = record(record(part).inlineData);
+      image = { b64_json: inline.data };
+      mime = inline.mimeType;
+    }
+    const b64 = image.b64_json;
+    if (
+      typeof b64 === 'string' &&
+      b64 &&
+      b64.length <= 11200000 &&
+      /^[A-Za-z0-9+/=]+$/.test(b64)
+    ) {
+      // Preserve the actual format; compatible APIs frequently return PNG.
+      mime =
+        mime ||
+        (b64.startsWith('iVBORw0KGgo')
+          ? 'image/png'
+          : b64.startsWith('UklGR')
+            ? 'image/webp'
+            : 'image/jpeg');
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(String(mime)))
+        throw new AIError('图片格式不受支持，请使用 PNG、JPEG 或 WebP', 502);
+      return { image: `data:${mime};base64,${b64}` };
+    }
+    if (typeof image.url === 'string') {
+      let url: URL;
+      try {
+        url = new URL(image.url);
+        normalizeApiBaseUrl(url.origin);
+      } catch {
+        throw new AIError('服务返回的图片地址不安全或无效', 502);
+      }
+      if (url.username || url.password)
+        throw new AIError('服务返回的图片地址不安全或无效', 502);
+      // Download in the browser without the provider key, never through a privileged server fetch.
+      return { imageUrl: url.href };
+    }
+    throw new AIError('服务未返回可用图片，请确认所填模型支持图片生成', 502);
+  }
+
   let content: unknown;
   if (protocol === 'anthropic') {
     if (!['end_turn', 'stop_sequence'].includes(String(data.stop_reason)))

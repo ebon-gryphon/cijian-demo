@@ -48,6 +48,8 @@ import './journal.css';
 import { isRetiredExample, withoutRetiredExamples } from './retired-examples';
 import {
   AI_PRESETS,
+  IMAGE_PRESETS,
+  type ImageProtocol,
   BUILTIN_PROXY_BASES,
   type TextProtocol,
 } from './ai-connections';
@@ -112,6 +114,8 @@ async function request(path: string, body?: unknown, signal?: AbortSignal) {
     apiBaseUrl: string;
     textModel: string;
     imageModel: string;
+    imageProtocol: ImageProtocol;
+    imageUrl?: string;
     title: string;
     story: string;
     prompt: string;
@@ -149,6 +153,8 @@ export default function Home() {
   const [proxyApiBases, setProxyApiBases] =
     useState<string[]>(BUILTIN_PROXY_BASES);
   const [protocol, setProtocol] = useState<TextProtocol>('openai');
+  const [imageProtocol, setImageProtocol] = useState<ImageProtocol>('openai');
+  const [imageDirectConnection, setImageDirectConnection] = useState(false);
   const [imageApiBaseUrl, setImageApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
   const [imageKey, setImageKey] = useState('');
   const [imageConfigured, setImageConfigured] = useState(false);
@@ -174,6 +180,7 @@ export default function Home() {
   const [dirty, setDirty] = useState(false);
   const busyRef = useRef(false);
   const mounted = useRef(true);
+  const settingsEdited = useRef(false);
   const offline =
     typeof window !== 'undefined' && window.location.protocol === 'file:';
   const paired = !!session && !localMode;
@@ -257,12 +264,15 @@ export default function Home() {
           if (mounted.current) {
             setConfigured(c.configured);
             setProxyApiBases(c.proxyBases || BUILTIN_PROXY_BASES);
-            setProtocol(c.protocol || 'openai');
-            setImageApiBaseUrl(c.imageApiBaseUrl || DEFAULT_API_BASE_URL);
             setImageConfigured(!!c.imageConfigured);
-            setApiBaseUrl(c.apiBaseUrl || DEFAULT_API_BASE_URL);
-            setTextModel(c.textModel);
-            setImageModel(c.imageModel);
+            if (!settingsEdited.current) {
+              setProtocol(c.protocol || 'openai');
+              setImageApiBaseUrl(c.imageApiBaseUrl || DEFAULT_API_BASE_URL);
+              setImageProtocol(c.imageProtocol || 'openai');
+              setApiBaseUrl(c.apiBaseUrl || DEFAULT_API_BASE_URL);
+              setTextModel(c.textModel);
+              setImageModel(c.imageModel);
+            }
           }
         } catch {
           /* Manual model connection remains available. */
@@ -339,7 +349,7 @@ export default function Home() {
     const suppliedKey = imageAction
       ? imageKey.trim() ||
         (selectedBaseUrl === normalizeApiBaseUrl(apiBaseUrl) &&
-        protocol === 'openai'
+        protocol === imageProtocol
           ? key.trim()
           : '')
       : key.trim();
@@ -355,7 +365,11 @@ export default function Home() {
     );
     const signal = AbortSignal.any([abortRef.current.signal, timeout]);
     try {
-      if (offline || (suppliedKey && directConnection)) {
+      if (
+        offline ||
+        (suppliedKey &&
+          (imageAction ? imageDirectConnection : directConnection))
+      ) {
         return await generateJournal(
           body,
           suppliedKey,
@@ -364,6 +378,7 @@ export default function Home() {
             image: imageModel.trim(),
             baseUrl: selectedBaseUrl,
             protocol: imageAction ? 'openai' : protocol,
+            imageProtocol: imageAction ? imageProtocol : undefined,
           },
           fetch,
           signal,
@@ -378,6 +393,7 @@ export default function Home() {
           imageModel: imageModel.trim(),
           apiBaseUrl: selectedBaseUrl,
           protocol: imageAction ? 'openai' : protocol,
+          imageProtocol: imageAction ? imageProtocol : undefined,
         },
         signal,
       );
@@ -643,7 +659,52 @@ export default function Home() {
           image: input,
           confirmed: true,
         });
-        const image = result.image;
+        let image = result.image;
+        if (!image && result.imageUrl) {
+          try {
+            const response = await fetch(result.imageUrl, {
+              credentials: 'omit',
+              referrerPolicy: 'no-referrer',
+              redirect: 'error',
+              signal: AbortSignal.any([
+                abortRef.current!.signal,
+                AbortSignal.timeout(30000),
+              ]),
+            });
+            if (!response.ok || !response.body) throw new Error('download');
+            const reader = response.body.getReader();
+            const chunks: Uint8Array[] = [];
+            let length = 0;
+            try {
+              while (true) {
+                const part = await reader.read();
+                if (part.done) break;
+                length += part.value.length;
+                if (length > 8 * 1024 * 1024) throw new Error('size');
+                chunks.push(part.value);
+              }
+            } finally {
+              await reader.cancel();
+            }
+            const bytes = new Uint8Array(length);
+            let offset = 0;
+            for (const chunk of chunks) {
+              bytes.set(chunk, offset);
+              offset += chunk.length;
+            }
+            image = await readPicture(
+              new File([bytes], 'generated', {
+                type: response.headers.get('Content-Type') || 'image/png',
+              }),
+            );
+          } catch {
+            if (abortRef.current?.signal.aborted)
+              throw new Error('生成已取消，片段已保留');
+            throw new Error(
+              '图片已生成，但图片链接无法读取、过大或不允许跨域访问。请让服务返回 Base64 图片，或下载后手动上传',
+            );
+          }
+        }
         if (!image) throw new Error('图片没有完整返回，请重试');
         setImageDraft((i) => ({ ...i, step: 3, result: image }));
       },
@@ -1401,7 +1462,10 @@ export default function Home() {
               </DialogDescription>
               <div
                 className="dialog-fields"
-                onChangeCapture={() => setConnectionStatus('')}
+                onChangeCapture={() => {
+                  settingsEdited.current = true;
+                  setConnectionStatus('');
+                }}
               >
                 <label className="field">
                   服务预设
@@ -1497,8 +1561,71 @@ export default function Home() {
                 <details>
                   <summary>配图服务（可选，单独配置）</summary>
                   <p className="help-note">
-                    图片服务目前支持 OpenAI Images
-                    兼容接口。文字模型不能自动用于生图；未配置时仍可上传照片。
+                    支持 OpenAI Images 兼容、Gemini 原生图片和豆包 Seedream
+                    接口。需填写支持生图的模型；改图还需该模型支持参考图输入。
+                  </p>
+                  <label className="field">
+                    图片服务预设
+                    <select
+                      aria-label="图片服务预设"
+                      defaultValue="custom"
+                      disabled={!!busy}
+                      onChange={(e) => {
+                        const preset = IMAGE_PRESETS.find(
+                          (p) => p.id === e.target.value,
+                        );
+                        if (!preset) return;
+                        setImageApiBaseUrl(preset.baseUrl);
+                        setImageProtocol(preset.protocol);
+                        setImageModel(preset.model);
+                        setImageKey('');
+                        setImageDirectConnection(false);
+                      }}
+                    >
+                      <option value="custom">自定义 / 当前配置</option>
+                      {IMAGE_PRESETS.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    图片接口协议
+                    <select
+                      aria-label="图片接口协议"
+                      value={imageProtocol}
+                      disabled={!!busy}
+                      onChange={(e) => {
+                        setImageProtocol(e.target.value as ImageProtocol);
+                        setImageKey('');
+                      }}
+                    >
+                      <option value="openai">
+                        OpenAI Images 兼容（可接其他平台）
+                      </option>
+                      <option value="gemini">Gemini 原生图片</option>
+                      <option value="seedream">豆包 Seedream</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    图片连接方式
+                    <select
+                      aria-label="图片连接方式"
+                      value={imageDirectConnection ? 'direct' : 'proxy'}
+                      disabled={!!busy || offline}
+                      onChange={(e) =>
+                        setImageDirectConnection(e.target.value === 'direct')
+                      }
+                    >
+                      <option value="proxy">站点转发（内置服务）</option>
+                      <option value="direct">
+                        浏览器直连（服务需允许跨域）
+                      </option>
+                    </select>
+                  </label>
+                  <p className="help-note">
+                    自定义服务可选择浏览器直连；站点转发需要预先配置服务地址。离线文件始终使用直连。
                   </p>
                   <label className="field">
                     图片 API 地址
@@ -1526,6 +1653,7 @@ export default function Home() {
                   <label className="field">
                     图片模型
                     <input
+                      placeholder="填写服务商的图片模型 ID 或接入点 ID"
                       value={imageModel}
                       disabled={!!busy}
                       maxLength={120}
@@ -1534,7 +1662,7 @@ export default function Home() {
                   </label>
                 </details>
                 <p className="help-note">
-                  生成时将向所填服务发送当前片段、选中的记忆或原图。用量计入该服务账户；测试连接会发送一条简短请求。配图另需服务支持图片接口。
+                  生成时将向所填服务发送当前片段、选中的记忆或原图。用量计入该服务账户；下方测试连接仅验证写作服务，不代表图片服务已验证。配图将在确认提示词后调用所选图片服务。
                 </p>
                 {!offline && (
                   <label className="field">

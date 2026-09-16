@@ -68,3 +68,18 @@ AI 写作支持 OpenAI Chat Completions 兼容、Anthropic Messages、Gemini Gen
 ## 当前示例
 
 2026-09-14 全部重写为美好共同经历：第一次一起看海、生日藏花的惊喜、搬进新家的晨光；每篇都有双方片段和全新配图。旧版原始演示内容不再展示或自动导入。完整内容匹配用于清理旧示例，用户修改过的记录保留。
+
+
+### 图片服务
+
+在 AI 设置 → 配图服务中选择图片服务预设或自定义地址，填写图片 Key、模型 ID 和接口协议。图片服务和写作服务可使用不同平台及连接方式。
+
+- OpenAI Images 兼容：`/images/generations` 与 multipart `/images/edits`。兼容服务不再接收 GPT Image 专属的 quality/output_format 参数；请求 Base64，同时处理服务返回的 HTTPS 图片链接。
+- Gemini 原生图片：`/models/{model}:generateContent`，使用 `x-goog-api-key`，参考图按 inlineData 发送。
+- 豆包 Seedream：`/images/generations`，使用 JSON image 传递参考图。填写服务商提供的模型或接入点 ID。
+
+模型需要具有对应的生图/改图能力。仅遵循其他自有格式或异步任务接口的服务尚不支持。自定义域名转发需加入 DIARY_ALLOWED_API_BASES；浏览器直连需服务允许跨域。图片链接由浏览器无凭据下载，下载受 8 MB 限制且需允许跨域；不会把图片服务 Key 发往图片 CDN。下方“测试连接”只验证写作模型，不代表图片调用已经验证。
+
+服务端可配置 DIARY_IMAGE_API_PROTOCOL（openai/gemini/seedream），并与 DIARY_IMAGE_API_BASE_URL、DIARY_IMAGE_API_KEY、DIARY_IMAGE_MODEL 配合。真实 Key 未在自动测试中调用；接口测试使用模拟响应。
+
+接口依据：[Gemini 图片生成](https://ai.google.dev/gemini-api/docs/generate-content/image-generation)、[Gemini 请求参数](https://ai.google.dev/api/generate-content)、[Seedream 使用说明](https://developer.volcengine.com/articles/7553203404664176650)。

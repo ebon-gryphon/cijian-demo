@@ -3,7 +3,11 @@ import {
   DEFAULT_API_BASE_URL,
   normalizeApiBaseUrl,
 } from './journal-ai';
-import { BUILTIN_PROXY_BASES, textProtocol } from './ai-connections';
+import {
+  BUILTIN_PROXY_BASES,
+  textProtocol,
+  imageProtocol,
+} from './ai-connections';
 export type AIEnvironment = {
   DIARY_API_KEY?: string;
   DIARY_API_BASE_URL?: string;
@@ -11,6 +15,7 @@ export type AIEnvironment = {
   DIARY_TEXT_MODEL?: string;
   DIARY_IMAGE_MODEL?: string;
   DIARY_IMAGE_API_KEY?: string;
+  DIARY_IMAGE_API_PROTOCOL?: string;
   DIARY_IMAGE_API_BASE_URL?: string;
   DIARY_ALLOWED_API_BASES?: string;
 };
@@ -52,7 +57,8 @@ export function resolveAIConnection(
     };
     let protocol;
     try {
-      protocol = textProtocol(body.protocol);
+      protocol = image ? ('openai' as const) : textProtocol(body.protocol);
+      if (image) imageProtocol(body.imageProtocol);
     } catch {
       throw new AIError('请选择支持的接口协议');
     }
@@ -61,6 +67,7 @@ export function resolveAIConnection(
       models: {
         baseUrl,
         protocol,
+        imageProtocol: image ? imageProtocol(body.imageProtocol) : undefined,
         text: image ? 'unused' : model(body.textModel),
         image: image ? model(body.imageModel) : 'unused',
       },
@@ -83,6 +90,7 @@ export function resolveAIConnection(
       protocol: image
         ? ('openai' as const)
         : textProtocol(env.DIARY_API_PROTOCOL),
+      imageProtocol: imageProtocol(env.DIARY_IMAGE_API_PROTOCOL),
       text: env.DIARY_TEXT_MODEL || 'gpt-5-mini',
       image: env.DIARY_IMAGE_MODEL || 'gpt-image-2',
     },
