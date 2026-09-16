@@ -16,9 +16,17 @@
 
 云端结构化日记使用 D1，图片使用 R2。数据库结构位于 `db/schema.ts`，迁移文件位于 `drizzle/`；不要删除历史迁移或原表，以免丢失旧数据。开发环境需要应用三个 SQL 迁移后体验创建/加入。身份沿用原双人空间，以 HttpOnly Cookie 保存，每个空间最多两人。
 
-AI 默认走 OpenAI 的 Chat Completions 与 Images API（generations / edits），没有模拟成功或模板替代。页面右上角可填写自己的 API Key，密钥仅在当前页面内存中使用，不写入存储。也可通过服务端环境配置 `DIARY_API_KEY`、`DIARY_TEXT_MODEL`、`DIARY_IMAGE_MODEL`；使用服务端密钥需要连接双人日记。模型 ID 可调整为账户支持的模型。
+AI 写作支持 OpenAI Chat Completions 兼容、Anthropic Messages、Gemini Generate Content 三种协议。右上角 AI 设置可选择预设，也可自行填写 API 地址、密钥与模型 ID。MiMo、OpenAI、DeepSeek、Claude 和 Gemini 提供地址预设；模型名称需以服务商账户实际支持的 ID 为准。仅填写其他平台的 Key、保留 OpenAI 地址不能跨平台调用。
 
-没有密钥时可以手写、编辑、上传、保存，生成按钮会返回明确提示。本地文件「打开此间.html」联网后可使用自己填写的 OpenAI API Key 直接调用模型，无需创建双人空间或等待另一人填写；浏览器必须能够访问 OpenAI 服务。本地文件不支持跨设备同步，日记保存在当前浏览器。
+点击「测试连接」会向所选模型发送一条简短请求，不发送日记正文；确认成功后再生成故事。生成结果始终显示在「我们的故事」编辑区，失败、取消、超时均保留原文并提供就地提示。没有模拟成功或模板替代。
+
+写作和配图可分别设置地址、密钥和模型。配图目前支持 OpenAI Images 兼容接口（generations / edits），不是所有文字模型都有生图能力。图片密钥仅在地址相同且写作协议为 OpenAI 兼容时可留空复用。密钥只在当前页面内存使用，不写入浏览器存储；切换服务地址或预设会清除对应密钥。
+
+线上默认由站点转发预设服务的请求，避免浏览器跨域限制。自定义服务可选择浏览器直连（服务商须允许跨域），或由部署者把准确的 Base URL 加入 `DIARY_ALLOWED_API_BASES`（逗号分隔）。站点只转发预设和明确允许的地址，不允许用户任意指定服务器请求目标。
+
+也可用环境配置站点服务：`DIARY_API_KEY`、`DIARY_API_BASE_URL`、`DIARY_API_PROTOCOL`、`DIARY_TEXT_MODEL`；配图使用独立的 `DIARY_IMAGE_API_KEY`、`DIARY_IMAGE_API_BASE_URL`、`DIARY_IMAGE_MODEL`。使用站点密钥需要连接双人日记；页面输入不能改变站点密钥的发送目标。
+
+没有密钥时可以手写、编辑、上传、保存。本地文件「打开此间.html」联网后可直接调用设置中的模型，无需创建双人空间或等待另一人填写，服务需允许浏览器跨域访问。本地文件不支持跨设备同步，日记保存在当前浏览器。
 
 ## 数据与兼容
 
@@ -46,10 +54,16 @@ AI 默认走 OpenAI 的 Chat Completions 与 Images API（generations / edits）
 - `npm test`：保存校验、真实模型输出解析、错误脱敏、生图确认、原图编辑请求。
 - 双人云端测试：创建/加入、两人上限、跨身份读取、版本冲突、禁止修改对方片段、空间及图片隔离。
 - 浏览器测试：故事编辑、本机保存恢复、图片需求澄清、提示词失败保留、上传和改图入口、移动端布局。
+- `tests/journal-generation.mjs`：浏览器验证输出区、单人生成、就地错误提示、取消、超时、保留正文和重试；支持通过 `CIJIAN_TEST_URL` 检查网页版，默认检查本地 HTML。使用模拟模型响应，不代表真实 API 已连通。
 - 真实 AI 生成效果需要可用 API Key 与对应模型权限。当前没有凭据，未做付费模型实测。
 - 特效首版提供静态图片修改，不包含动态视频特效。
 
-接口参考：https://developers.openai.com/api/docs/guides/image-generation
+接口参考：
+- 图片：https://developers.openai.com/api/docs/guides/image-generation
+- MiMo：https://mimo.mi.com/docs/en-US/api/chat/openai-api
+- Anthropic：https://platform.claude.com/docs/en/api/overview
+- Gemini：https://ai.google.dev/api/generate-content
+- DeepSeek：https://api-docs.deepseek.com/
 
 ## 当前示例
 

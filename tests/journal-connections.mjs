@@ -1,0 +1,71 @@
+import assert from 'node:assert/strict';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+try {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto(process.env.CIJIAN_TEST_URL || 'http://localhost:3019');
+  await page.getByRole('textbox', { name: '故事正文', exact: true }).waitFor();
+  const requests = [];
+  await page.route('**/api/diary/ai', async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    const body = route.request().postDataJSON();
+    requests.push(body);
+    return route.fulfill({ json: body.action === 'test' ? { connected: true } : { title: '我们的午后', story: '我们一起散步。' } });
+  });
+  await page.getByRole('button', { name: 'AI 设置', exact: true }).click();
+  await page.getByLabel('服务预设', { exact: true }).selectOption('mimo');
+  assert.equal(await page.getByLabel('API 地址（Base URL）', { exact: true }).inputValue(), 'https://api.xiaomimimo.com/v1');
+  assert.equal(await page.getByLabel('写作模型', { exact: true }).inputValue(), 'mimo-v2.5');
+  await page.getByLabel('API Key', { exact: true }).fill('mimo-test-only');
+  await page.getByRole('button', { name: '测试连接', exact: true }).click();
+  await page.getByRole('status').filter({ hasText: '连接成功' }).waitFor();
+  assert.equal(requests.at(-1).apiBaseUrl, 'https://api.xiaomimimo.com/v1');
+  assert.equal(requests.at(-1).key, 'mimo-test-only');
+  assert.equal(requests.at(-1).action, 'test');
+  await page.getByRole('button', { name: '应用设置', exact: true }).click();
+  await page.locator('#note-host').fill('我们一起散步');
+  await page.getByRole('button', { name: '写成我们的故事', exact: true }).click();
+  await page.getByRole('status').filter({ hasText: '故事已写好' }).waitFor();
+  assert.equal(requests.at(-1).protocol, 'openai');
+  assert.equal(requests.at(-1).textModel, 'mimo-v2.5');
+  assert.equal(await page.getByRole('textbox', { name: '故事正文', exact: true }).inputValue(), '我们一起散步。');
+  await page.getByRole('button', { name: 'AI 设置', exact: true }).click();
+  for (const [preset, protocol, model] of [['anthropic', 'anthropic', 'claude-test'], ['gemini', 'gemini', 'gemini-test']]) {
+    await page.getByLabel('服务预设', { exact: true }).selectOption(preset);
+    assert.equal(await page.getByLabel('API Key', { exact: true }).inputValue(), '');
+    await page.getByLabel('写作模型', { exact: true }).fill(model);
+    await page.getByLabel('API Key', { exact: true }).fill(`${preset}-test-only`);
+    await page.getByRole('button', { name: '测试连接', exact: true }).click();
+    await page.getByRole('status').filter({ hasText: '连接成功' }).waitFor();
+    assert.equal(requests.at(-1).protocol, protocol);
+    assert.equal(requests.at(-1).textModel, model);
+  }
+  await page.getByLabel('API 地址（Base URL）', { exact: true }).fill('https://custom.example/v1');
+  assert.equal(await page.getByLabel('API Key', { exact: true }).inputValue(), '');
+  assert.equal(await page.getByRole('status').filter({ hasText: '连接成功' }).count(), 0);
+  await page.getByLabel('接口协议', { exact: true }).selectOption('openai');
+  await page.getByLabel('写作模型', { exact: true }).fill('vendor/custom-model');
+  await page.getByLabel('API Key', { exact: true }).fill('custom-test-only');
+  await page.getByLabel('连接方式', { exact: true }).selectOption('direct');
+  await page.route('https://custom.example/v1/chat/completions', async route => {
+    assert.equal(route.request().headers().authorization, 'Bearer custom-test-only');
+    assert.equal(route.request().postDataJSON().model, 'vendor/custom-model');
+    await route.fulfill({ json: { choices: [{ finish_reason: 'stop', message: { content: '{"ok":true}' } }] } });
+  });
+  await page.getByRole('button', { name: '测试连接', exact: true }).click();
+  await page.getByRole('status').filter({ hasText: '连接成功' }).waitFor();
+  await page.getByText('配图服务（可选，单独配置）', { exact: true }).click();
+  await page.getByLabel('图片 API Key', { exact: true }).fill('separate-image-key');
+  assert.equal(await page.getByLabel('API Key', { exact: true }).inputValue(), 'custom-test-only');
+  await page.screenshot({ path: '/tmp/cijian-ai-settings-fixed.png', fullPage: true });
+  await page.getByRole('button', { name: '应用设置', exact: true }).click();
+  await page.reload();
+  await page.getByRole('button', { name: 'AI 设置', exact: true }).click();
+  assert.equal(await page.getByLabel('API Key', { exact: true }).inputValue(), '');
+  await page.getByText('配图服务（可选，单独配置）', { exact: true }).click();
+  assert.equal(await page.getByLabel('图片 API Key', { exact: true }).inputValue(), '');
+  assert.deepEqual(errors, []);
+  console.log('PASS: MiMo preset/story, native protocol selection, custom browser connection, connection test, endpoint-change key clearing, separate image key and no key persistence. Provider responses mocked.');
+} finally { await browser.close(); }

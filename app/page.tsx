@@ -20,7 +20,6 @@ import {
   Link2,
   History,
   LoaderCircle,
-  PenLine,
   Cloud,
   HardDrive,
   WandSparkles,
@@ -47,7 +46,17 @@ import {
 } from './journal-storage';
 import './journal.css';
 import { isRetiredExample, withoutRetiredExamples } from './retired-examples';
-import { AIError, generateJournal } from './journal-ai';
+import {
+  AI_PRESETS,
+  BUILTIN_PROXY_BASES,
+  type TextProtocol,
+} from './ai-connections';
+import {
+  AIError,
+  generateJournal,
+  DEFAULT_API_BASE_URL,
+  normalizeApiBaseUrl,
+} from './journal-ai';
 type Session = {
   member: { id: string; spaceId: string; displayName: string; role: Person };
   partner: { displayName: string; role: Person } | null;
@@ -96,6 +105,11 @@ async function request(path: string, body?: unknown, signal?: AbortSignal) {
     src: string;
     error?: string;
     configured: boolean;
+    imageConfigured: boolean;
+    imageApiBaseUrl: string;
+    protocol: TextProtocol;
+    proxyBases: string[];
+    apiBaseUrl: string;
     textModel: string;
     imageModel: string;
     title: string;
@@ -126,8 +140,20 @@ export default function Home() {
   const [error, setError] = useState('');
   const [dialogError, setDialogError] = useState('');
   const [busy, setBusy] = useState('');
+  const [storyError, setStoryError] = useState('');
+  const storyRef = useRef<HTMLElement>(null);
+  const storyTextRef = useRef<HTMLTextAreaElement>(null);
   const [draftStatus, setDraftStatus] = useState('');
   const [key, setKey] = useState('');
+  const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
+  const [proxyApiBases, setProxyApiBases] =
+    useState<string[]>(BUILTIN_PROXY_BASES);
+  const [protocol, setProtocol] = useState<TextProtocol>('openai');
+  const [imageApiBaseUrl, setImageApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
+  const [imageKey, setImageKey] = useState('');
+  const [imageConfigured, setImageConfigured] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('');
+  const [directConnection, setDirectConnection] = useState(false);
   const [textModel, setTextModel] = useState('gpt-5-mini');
   const [imageModel, setImageModel] = useState('gpt-image-2');
   const [configured, setConfigured] = useState(false);
@@ -230,6 +256,11 @@ export default function Home() {
           const c = await request('/api/diary/ai');
           if (mounted.current) {
             setConfigured(c.configured);
+            setProxyApiBases(c.proxyBases || BUILTIN_PROXY_BASES);
+            setProtocol(c.protocol || 'openai');
+            setImageApiBaseUrl(c.imageApiBaseUrl || DEFAULT_API_BASE_URL);
+            setImageConfigured(!!c.imageConfigured);
+            setApiBaseUrl(c.apiBaseUrl || DEFAULT_API_BASE_URL);
             setTextModel(c.textModel);
             setImageModel(c.imageModel);
           }
@@ -291,42 +322,79 @@ export default function Home() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : '操作失败，请重试';
       if (dialog) setDialogError(msg);
-      else setError(msg);
+      else {
+        setError(msg);
+        if (label === 'story') setStoryError(msg);
+      }
     } finally {
       busyRef.current = false;
       setBusy('');
     }
   }
   async function ai(body: Record<string, unknown>) {
-    const suppliedKey = key.trim();
-    if (!suppliedKey && (offline || !configured)) {
+    const imageAction = body.action === 'image' || body.action === 'edit';
+    const selectedBaseUrl = normalizeApiBaseUrl(
+      imageAction ? imageApiBaseUrl : apiBaseUrl,
+    );
+    const suppliedKey = imageAction
+      ? imageKey.trim() ||
+        (selectedBaseUrl === normalizeApiBaseUrl(apiBaseUrl) &&
+        protocol === 'openai'
+          ? key.trim()
+          : '')
+      : key.trim();
+    if (
+      !suppliedKey &&
+      (offline || !(imageAction ? imageConfigured : configured))
+    ) {
       throw new Error('请先点击右上角 AI 设置，连接模型服务后再生成');
     }
     abortRef.current = new AbortController();
-    if (offline) {
-      try {
+    const timeout = AbortSignal.timeout(
+      body.action === 'image' || body.action === 'edit' ? 185000 : 65000,
+    );
+    const signal = AbortSignal.any([abortRef.current.signal, timeout]);
+    try {
+      if (offline || (suppliedKey && directConnection)) {
         return await generateJournal(
           body,
           suppliedKey,
-          { text: textModel.trim(), image: imageModel.trim() },
+          {
+            text: textModel.trim(),
+            image: imageModel.trim(),
+            baseUrl: selectedBaseUrl,
+            protocol: imageAction ? 'openai' : protocol,
+          },
           fetch,
-          abortRef.current.signal,
+          signal,
         );
-      } catch (e) {
-        if (e instanceof AIError) throw e;
-        if (e instanceof Error && e.name === 'TimeoutError')
-          throw new Error('模型响应超时，片段已保留，请重试');
-        if (e instanceof Error && e.name === 'AbortError')
-          throw new Error('生成已取消，片段已保留');
-        throw new Error('无法连接模型服务，请检查网络及服务是否允许浏览器访问。片段已保留，可重试');
       }
+      return await request(
+        '/api/diary/ai',
+        {
+          ...body,
+          key: suppliedKey,
+          textModel: textModel.trim(),
+          imageModel: imageModel.trim(),
+          apiBaseUrl: selectedBaseUrl,
+          protocol: imageAction ? 'openai' : protocol,
+        },
+        signal,
+      );
+    } catch (e) {
+      if (e instanceof AIError) throw e;
+      if (e instanceof Error && e.name === 'TimeoutError')
+        throw new Error('模型响应超时，片段已保留，请重试');
+      if (e instanceof Error && e.name === 'AbortError')
+        throw new Error('生成已取消，片段已保留');
+      if (e instanceof TypeError)
+        throw new Error(
+          '无法连接模型服务，请检查网络及服务是否允许浏览器访问。片段已保留，可重试',
+        );
+      throw e;
     }
-    return request(
-      '/api/diary/ai',
-      { ...body, key: suppliedKey, textModel, imageModel },
-      abortRef.current.signal,
-    );
   }
+
   function loadEntry(entry: Entry) {
     const copy = structuredClone(entry);
     if (copy.sample) {
@@ -372,7 +440,9 @@ export default function Home() {
     }
   }
   function generateStory() {
-    if (!draft) return;
+    if (!draft || busyRef.current) return;
+    setStoryError('');
+    storyRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     void run('story', async () => {
       const result = await ai({
         action: 'story',
@@ -382,12 +452,19 @@ export default function Home() {
           .filter((e) => draft.references.includes(e.id))
           .map((e) => ({ title: e.title, story: e.story })),
       });
-      if (!result.title || !result.story) throw new Error('故事没有完整返回，请重试');
+      if (!result.title || !result.story)
+        throw new Error('故事没有完整返回，请重试');
       if (draft.story)
         setHistory((h) =>
           [{ title: draft.title, story: draft.story }, ...h].slice(0, 6),
         );
       patch({ title: result.title, story: result.story });
+      requestAnimationFrame(() => {
+        storyRef.current?.scrollIntoView({
+          block: 'center',
+          behavior: 'smooth',
+        });
+      });
       setNotice('故事已写好，可以直接修改标题和正文，再决定是否配图');
     });
   }
@@ -944,10 +1021,14 @@ export default function Home() {
                     )}
                   </button>
                   <p className="help-note">
-                    生成后可自由编辑 · 也可以在右页直接写
+                    结果显示在「我们的故事」中，可直接编辑
                   </p>
                 </section>
-                <section className="story-page">
+                <section
+                  className="story-page"
+                  ref={storyRef}
+                  aria-label="故事输出与编辑"
+                >
                   <div className="page-caption">
                     <span className="step-label">
                       <b>02</b> 我们的故事
@@ -956,80 +1037,81 @@ export default function Home() {
                       {draft.mode === 'creative' ? '含想象创作' : '忠实记录'}
                     </span>
                   </div>
-                  {!draft.story && !draft.title ? (
-                    <div className="paper-empty">
-                      <p className="quote">
-                        那些想起就会笑的事，
-                        <br />
-                        一起记下来。
-                      </p>
-                      <p>从左边的几句话开始，或自己写下故事。</p>
-                      <figure className="sample-peek">
-                        <img
-                          src={examples[0].pictures[0].src}
-                          alt="两个人在晴朗海边牵手踩浪花，示例配图"
-                        />
-                        <figcaption>
-                          {examples[0].title}
-                          <small>示例 · AI 配图</small>
-                        </figcaption>
-                      </figure>
-                      <div className="empty-try">
+                  <div
+                    className={`generation-feedback ${storyError ? 'error' : ''}`}
+                  >
+                    {busy === 'story' ? (
+                      <output aria-live="polite">
+                        <Busy>正在整理你的片段，生成后会显示在下方…</Busy>
+                        <p>通常需要一些时间。如果等待过久，可以取消后重试。</p>
                         <button
                           className="text-button"
-                          disabled={!!busy}
-                          onClick={() => chooseEntry(examples[0])}
+                          onClick={() => abortRef.current?.abort()}
                         >
-                          翻看这一篇示例 <ArrowUpRight />
+                          取消生成
                         </button>
-                      </div>
-                      <button
-                        className="button-secondary"
-                        disabled={!!busy}
-                        onClick={() => patch({ title: '今天的小事' })}
-                      >
-                        <PenLine />
-                        我想自己写
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <input
-                        className="story-title"
-                        aria-label="故事标题"
-                        value={draft.title}
-                        placeholder="给今天起个名字"
-                        maxLength={100}
-                        disabled={!!busy}
-                        onChange={(e) => patch({ title: e.target.value })}
-                      />
-                      <textarea
-                        className="story-text"
-                        aria-label="故事正文"
-                        value={draft.story}
-                        placeholder="这一页由你开始。写下今天的故事，也可以让 AI 帮你整理左边的片段。"
-                        maxLength={15000}
-                        disabled={!!busy}
-                        onChange={(e) => patch({ story: e.target.value })}
-                      />
-                      <div className="story-meta">
-                        <span>可直接编辑</span>
-                        <span>
-                          {draft.story.length} 字{' '}
-                          {history.length > 0 && (
-                            <button
-                              className="text-button"
-                              onClick={() => openModal('history')}
-                              disabled={!!busy}
-                            >
-                              <History size={13} />
-                              上一版
-                            </button>
-                          )}
-                        </span>
-                      </div>
-                    </>
-                  )}
+                      </output>
+                    ) : storyError ? (
+                      <>
+                        <p>{storyError}</p>
+                        <button
+                          className="text-button"
+                          onClick={() => openModal('settings')}
+                        >
+                          检查 AI 设置
+                        </button>
+                      </>
+                    ) : !draft.story ? (
+                      <>
+                        <p>
+                          生成的故事会显示在这里。写好片段后点击「写成我们的故事」，也可直接输入正文。
+                        </p>
+                        <button
+                          className="text-button"
+                          onClick={() => storyTextRef.current?.focus()}
+                        >
+                          我想自己写
+                        </button>
+                      </>
+                    ) : (
+                      <p>故事已显示在下方，可以直接修改标题和正文。</p>
+                    )}
+                  </div>
+                  <input
+                    className="story-title"
+                    aria-label="故事标题"
+                    value={draft.title}
+                    placeholder="给今天起个名字"
+                    maxLength={100}
+                    disabled={!!busy}
+                    onChange={(e) => patch({ title: e.target.value })}
+                  />
+                  <textarea
+                    ref={storyTextRef}
+                    className="story-text"
+                    aria-label="故事正文"
+                    value={draft.story}
+                    placeholder="这一页由你开始。写下今天的故事，也可以让 AI 帮你整理左边的片段。"
+                    maxLength={15000}
+                    disabled={!!busy}
+                    onChange={(e) => patch({ story: e.target.value })}
+                  />
+                  <div className="story-meta">
+                    <span>可直接编辑</span>
+                    <span>
+                      {draft.story.length} 字{' '}
+                      {history.length > 0 && (
+                        <button
+                          className="text-button"
+                          onClick={() => openModal('history')}
+                          disabled={!!busy}
+                        >
+                          <History size={13} />
+                          上一版
+                        </button>
+                      )}
+                    </span>
+                  </div>
                   {draft.pictures.length > 0 && (
                     <div className="image-strip">
                       {draft.pictures.map((p) => (
@@ -1313,10 +1395,76 @@ export default function Home() {
             <>
               <DialogTitle>连接你的 AI</DialogTitle>
               <DialogDescription className="dialog-intro">
-                故事、提示词和图片使用 OpenAI 服务，请填写 OpenAI API Key。
+                支持 OpenAI 兼容、Anthropic 和 Gemini
+                文本接口。填写服务商对应的地址、Key 和完整模型 ID。
                 密钥只留在当前页面内存，刷新后需重新填写。
               </DialogDescription>
-              <div className="dialog-fields">
+              <div
+                className="dialog-fields"
+                onChangeCapture={() => setConnectionStatus('')}
+              >
+                <label className="field">
+                  服务预设
+                  <select
+                    aria-label="服务预设"
+                    defaultValue="custom"
+                    disabled={!!busy}
+                    onChange={(e) => {
+                      const preset = AI_PRESETS.find(
+                        (p) => p.id === e.target.value,
+                      );
+                      if (!preset) return;
+                      setApiBaseUrl(preset.baseUrl);
+                      setProtocol(preset.protocol);
+                      setTextModel(preset.model);
+                      setKey('');
+                      setDirectConnection(false);
+                      setConnectionStatus('');
+                    }}
+                  >
+                    <option value="custom">自定义 / 当前配置</option>
+                    {AI_PRESETS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  接口协议
+                  <select
+                    aria-label="接口协议"
+                    value={protocol}
+                    disabled={!!busy}
+                    onChange={(e) =>
+                      setProtocol(e.target.value as TextProtocol)
+                    }
+                  >
+                    <option value="openai">
+                      OpenAI 兼容（Chat Completions）
+                    </option>
+                    <option value="anthropic">Anthropic（Messages）</option>
+                    <option value="gemini">Gemini（Generate Content）</option>
+                  </select>
+                </label>
+                <label className="field">
+                  API 地址（Base URL）
+                  <input
+                    type="url"
+                    value={apiBaseUrl}
+                    autoComplete="off"
+                    disabled={!!busy}
+                    placeholder="https://服务商域名/v1"
+                    onChange={(e) => {
+                      setApiBaseUrl(e.target.value);
+                      setKey('');
+                    }}
+                  />
+                </label>
+                <p className="help-note">
+                  使用服务商提供的接口地址，不是官网首页。更换平台后也要填写该平台支持的模型
+                  ID。
+                </p>
                 {configured && (
                   <div className="status-card">
                     已配置站点 AI
@@ -1327,6 +1475,7 @@ export default function Home() {
                   API Key
                   <input
                     type="password"
+                    disabled={!!busy}
                     autoComplete="off"
                     value={key}
                     placeholder="填写你的 API Key"
@@ -1337,23 +1486,83 @@ export default function Home() {
                   <label className="field">
                     写作模型
                     <input
+                      disabled={!!busy}
+                      placeholder="填写服务商的模型 ID"
                       value={textModel}
                       onChange={(e) => setTextModel(e.target.value)}
                       maxLength={120}
+                    />
+                  </label>
+                </div>
+                <details>
+                  <summary>配图服务（可选，单独配置）</summary>
+                  <p className="help-note">
+                    图片服务目前支持 OpenAI Images
+                    兼容接口。文字模型不能自动用于生图；未配置时仍可上传照片。
+                  </p>
+                  <label className="field">
+                    图片 API 地址
+                    <input
+                      type="url"
+                      value={imageApiBaseUrl}
+                      disabled={!!busy}
+                      onChange={(e) => {
+                        setImageApiBaseUrl(e.target.value);
+                        setImageKey('');
+                      }}
+                    />
+                  </label>
+                  <label className="field">
+                    图片 API Key
+                    <input
+                      type="password"
+                      value={imageKey}
+                      autoComplete="off"
+                      disabled={!!busy}
+                      placeholder="同地址、同协议时可留空复用写作 Key"
+                      onChange={(e) => setImageKey(e.target.value)}
                     />
                   </label>
                   <label className="field">
                     图片模型
                     <input
                       value={imageModel}
-                      onChange={(e) => setImageModel(e.target.value)}
+                      disabled={!!busy}
                       maxLength={120}
+                      onChange={(e) => setImageModel(e.target.value)}
                     />
                   </label>
-                </div>
+                </details>
                 <p className="help-note">
-                  生成时将发送当前片段、选中的记忆或原图。用量计入所用服务账户。
+                  生成时将向所填服务发送当前片段、选中的记忆或原图。用量计入该服务账户；测试连接会发送一条简短请求。配图另需服务支持图片接口。
                 </p>
+                {!offline && (
+                  <label className="field">
+                    连接方式
+                    <select
+                      aria-label="连接方式"
+                      value={directConnection ? 'direct' : 'server'}
+                      disabled={!!busy}
+                      onChange={(e) =>
+                        setDirectConnection(e.target.value === 'direct')
+                      }
+                    >
+                      <option value="server">通过站点连接（推荐）</option>
+                      <option value="direct">
+                        浏览器直连（服务需允许跨域）
+                      </option>
+                    </select>
+                  </label>
+                )}
+                {!offline &&
+                  !proxyApiBases.includes(apiBaseUrl.replace(/\/+$/, '')) && (
+                    <p className="help-note">
+                      自定义服务如尚未配置站点转发，可选择浏览器直连。若服务不允许跨域，需要由部署者添加该服务地址。
+                    </p>
+                  )}
+                {connectionStatus && (
+                  <output className="status-card">{connectionStatus}</output>
+                )}
                 {offline && (
                   <div className="status-card">
                     本地版联网后可直接调用模型。只填写自己的片段即可生成，
@@ -1362,12 +1571,49 @@ export default function Home() {
                 )}
               </div>
               <div className="dialog-actions">
-                <button className="text-button" onClick={() => setKey('')}>
+                <button
+                  className="text-button"
+                  disabled={!!busy}
+                  onClick={() => {
+                    setKey('');
+                    setImageKey('');
+                  }}
+                >
                   清除密钥
                 </button>
                 <button
-                  className="button-primary"
+                  className="button-secondary"
+                  disabled={!!busy}
                   onClick={() => {
+                    setConnectionStatus('');
+                    void run(
+                      'test',
+                      async () => {
+                        await ai({ action: 'test' });
+                        setConnectionStatus('连接成功，当前写作模型可返回文本');
+                      },
+                      true,
+                    );
+                  }}
+                >
+                  {busy === 'test' ? <Busy>正在测试…</Busy> : '测试连接'}
+                </button>
+                <button
+                  className="button-primary"
+                  disabled={!!busy}
+                  onClick={() => {
+                    try {
+                      setApiBaseUrl(normalizeApiBaseUrl(apiBaseUrl));
+                    } catch (e) {
+                      setDialogError(
+                        e instanceof Error ? e.message : 'API 地址不正确',
+                      );
+                      return;
+                    }
+                    if (!textModel.trim()) {
+                      setDialogError('请填写写作模型名称');
+                      return;
+                    }
                     setModal(null);
                     setNotice(
                       key ? '模型设置已应用，生成时将验证连接' : '设置已应用',
