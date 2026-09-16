@@ -1,12 +1,10 @@
 import { getD1 } from '@/db';
 
-export type BetaMember = {
+export type JournalMember = {
   id: string;
   spaceId: string;
   displayName: string;
   role: 'host' | 'guest';
-  receptionEnabled: boolean;
-  manualBusy: boolean;
   lastSeenAt: number;
 };
 
@@ -23,17 +21,6 @@ export function cleanInviteCode(value: unknown) {
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '')
     .slice(0, 6);
-}
-
-export function cleanMessage(value: unknown) {
-  if (typeof value !== 'string') return '';
-  return value.trim().slice(0, 1000);
-}
-
-export function cleanNonce(value: unknown) {
-  if (typeof value !== 'string') return '';
-  const nonce = value.trim();
-  return /^[a-zA-Z0-9_-]{8,80}$/.test(nonce) ? nonce : '';
 }
 
 export function createInviteCode(
@@ -69,9 +56,9 @@ export function sameOrigin(request: Request) {
 
 export async function readJson(request: Request, limit = 12_000) {
   if (!request.headers.get('content-type')?.includes('application/json'))
-    throw new BetaError('请使用 JSON 请求', 415);
+    throw new JournalError('请使用 JSON 请求', 415);
   const reader = request.body?.getReader();
-  if (!reader) throw new BetaError('请求为空');
+  if (!reader) throw new JournalError('请求为空');
   let size = 0;
   const chunks: Uint8Array[] = [];
   while (true) {
@@ -80,7 +67,7 @@ export async function readJson(request: Request, limit = 12_000) {
     size += value.byteLength;
     if (size > limit) {
       await reader.cancel();
-      throw new BetaError('请求内容过大', 413);
+      throw new JournalError('请求内容过大', 413);
     }
     chunks.push(value);
   }
@@ -93,11 +80,11 @@ export async function readJson(request: Request, limit = 12_000) {
   try {
     return JSON.parse(new TextDecoder().decode(body)) as unknown;
   } catch {
-    throw new BetaError('请求内容格式不正确');
+    throw new JournalError('请求内容格式不正确');
   }
 }
 
-export class BetaError extends Error {
+export class JournalError extends Error {
   constructor(
     message: string,
     public status = 400,
@@ -106,22 +93,22 @@ export class BetaError extends Error {
   }
 }
 
-export function betaErrorResponse(error: unknown) {
-  const status = error instanceof BetaError ? error.status : 500;
-  if (!(error instanceof BetaError))
+export function journalErrorResponse(error: unknown) {
+  const status = error instanceof JournalError ? error.status : 500;
+  if (!(error instanceof JournalError))
     console.error(
       'Diary storage error',
       error instanceof Error ? error.message : 'unknown',
     );
   const message =
-    error instanceof BetaError ? error.message : '服务暂时不可用，请稍后重试';
+    error instanceof JournalError ? error.message : '服务暂时不可用，请稍后重试';
   return Response.json(
     { error: message },
     { status, headers: { 'Cache-Control': 'no-store' } },
   );
 }
 
-export async function requireMember(request: Request): Promise<BetaMember> {
+export async function requireMember(request: Request): Promise<JournalMember> {
   const authorization = request.headers.get('authorization') ?? '';
   const token = authorization.startsWith('Bearer ')
     ? authorization.slice(7).trim()
@@ -129,30 +116,25 @@ export async function requireMember(request: Request): Promise<BetaMember> {
         .get('cookie')
         ?.match(/(?:^|; )cijian_session=([a-f0-9]{64})(?:;|$)/)?.[1] ?? '');
   if (!/^[a-f0-9]{64}$/.test(token))
-    throw new BetaError('请重新进入双人日记', 401);
+    throw new JournalError('请重新进入双人日记', 401);
   const tokenHash = await hashToken(token);
   const member = await getD1()
     .prepare(
       `SELECT id, space_id AS spaceId, display_name AS displayName, role,
-              reception_enabled AS receptionEnabled, manual_busy AS manualBusy,
               last_seen_at AS lastSeenAt
        FROM members WHERE token_hash = ?`,
     )
     .bind(tokenHash)
-    .first<BetaMember>();
-  if (!member) throw new BetaError('日记身份已经失效，请重新进入', 401);
+    .first<JournalMember>();
+  if (!member) throw new JournalError('日记身份已经失效，请重新进入', 401);
   await getD1()
     .prepare('UPDATE members SET last_seen_at = ? WHERE id = ?')
     .bind(Date.now(), member.id)
     .run();
-  return {
-    ...member,
-    receptionEnabled: Boolean(member.receptionEnabled),
-    manualBusy: Boolean(member.manualBusy),
-  };
+  return member;
 }
 
-export async function sessionPayload(member: BetaMember) {
+export async function sessionPayload(member: JournalMember) {
   const db = getD1();
   const space = await db
     .prepare('SELECT id, invite_code AS inviteCode FROM spaces WHERE id = ?')
@@ -161,22 +143,15 @@ export async function sessionPayload(member: BetaMember) {
   const partner = await db
     .prepare(
       `SELECT id, display_name AS displayName, role,
-              reception_enabled AS receptionEnabled, manual_busy AS manualBusy,
               last_seen_at AS lastSeenAt
        FROM members WHERE space_id = ? AND id != ? LIMIT 1`,
     )
     .bind(member.spaceId, member.id)
-    .first<Omit<BetaMember, 'spaceId'>>();
-  if (!space) throw new BetaError('双人日记不存在', 404);
+    .first<Omit<JournalMember, 'spaceId'>>();
+  if (!space) throw new JournalError('双人日记不存在', 404);
   return {
     member,
     space,
-    partner: partner
-      ? {
-          ...partner,
-          receptionEnabled: Boolean(partner.receptionEnabled),
-          manualBusy: Boolean(partner.manualBusy),
-        }
-      : null,
+    partner,
   };
 }

@@ -35,8 +35,6 @@ import {
 import {
   newEntry,
   examples,
-  migrateLegacy,
-  migrateSharedMemories,
   type Entry,
   type Person,
   type Picture,
@@ -46,10 +44,10 @@ import {
   localWrite,
   readPicture,
   exportEntries,
-  restoreLegacyPictures,
 } from './journal-storage';
 import './journal.css';
 import { isRetiredExample, withoutRetiredExamples } from './retired-examples';
+import { AIError, generateJournal } from './journal-ai';
 type Session = {
   member: { id: string; spaceId: string; displayName: string; role: Person };
   partner: { displayName: string; role: Person } | null;
@@ -85,7 +83,7 @@ function Busy({ children }: { children: ReactNode }) {
 }
 async function request(path: string, body?: unknown, signal?: AbortSignal) {
   if (typeof window !== 'undefined' && window.location.protocol === 'file:')
-    throw new Error('离线文件支持本机记录；AI 与双人同步请使用在线预览');
+    throw new Error('跨设备同步需使用在线版本，本地文件可生成并保存日记');
   const response = await fetch(path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
@@ -179,7 +177,7 @@ export default function Home() {
       draft.pictures.length > 0);
   async function refresh() {
     const [s, e] = await Promise.all([
-      request('/api/beta/session'),
+      request('/api/diary/session'),
       request('/api/diary/entries'),
     ]);
     setSession(s);
@@ -201,49 +199,14 @@ export default function Home() {
             : undefined;
         if (oldDraft && !prior) await localWrite('draft', newEntry());
         const mode = await localRead<boolean>('localMode');
-        let migrated: Entry[] = [];
-        if (!(await localRead<boolean>('legacyMigrated'))) {
-          let migrationSucceeded = true;
-          try {
-            migrated = migrateLegacy(
-              localStorage.getItem('cijian-two-person-diary-v1'),
-            );
-            migrated.push(
-              ...migrateSharedMemories(
-                localStorage.getItem('between-us-demo-v1'),
-              ),
-            );
-            migrated = await withoutRetiredExamples(migrated);
-            migrated = await restoreLegacyPictures(
-              migrated,
-              localStorage.getItem('between-us-demo-v1'),
-            );
-          } catch {
-            migrationSucceeded = false;
-            migrated = [];
-            setError('旧日记暂时无法读取，原始数据仍保留在本机');
-          }
-          await localWrite('entries', [
-            ...saved,
-            ...migrated.filter((e) => !saved.some((x) => x.id === e.id)),
-          ]);
-          if (migrationSucceeded) await localWrite('legacyMigrated', true);
-        }
         if (!mounted.current) return;
-        setLocalEntries([
-          ...saved,
-          ...migrated.filter((e) => !saved.some((x) => x.id === e.id)),
-        ]);
+        setLocalEntries(saved);
         setDraft(prior || newEntry());
         setLocalMode(offline || !!mode);
         if (prior) {
           setDirty(true);
           setDraftStatus('已恢复本机草稿');
         }
-        if (migrated.length)
-          setNotice(
-            `已保留 ${migrated.length} 篇旧日记，可在共同记忆中查看并转存`,
-          );
       } catch {
         if (mounted.current) {
           setDraft(newEntry());
@@ -254,7 +217,7 @@ export default function Home() {
       }
       if (!offline) {
         try {
-          const s = await request('/api/beta/session');
+          const s = await request('/api/diary/session');
           if (mounted.current) {
             setSession(s);
             const e = await request('/api/diary/entries');
@@ -335,13 +298,32 @@ export default function Home() {
     }
   }
   async function ai(body: Record<string, unknown>) {
-    if (!key && !configured) {
+    const suppliedKey = key.trim();
+    if (!suppliedKey && (offline || !configured)) {
       throw new Error('请先点击右上角 AI 设置，连接模型服务后再生成');
     }
     abortRef.current = new AbortController();
+    if (offline) {
+      try {
+        return await generateJournal(
+          body,
+          suppliedKey,
+          { text: textModel.trim(), image: imageModel.trim() },
+          fetch,
+          abortRef.current.signal,
+        );
+      } catch (e) {
+        if (e instanceof AIError) throw e;
+        if (e instanceof Error && e.name === 'TimeoutError')
+          throw new Error('模型响应超时，片段已保留，请重试');
+        if (e instanceof Error && e.name === 'AbortError')
+          throw new Error('生成已取消，片段已保留');
+        throw new Error('无法连接模型服务，请检查网络及服务是否允许浏览器访问。片段已保留，可重试');
+      }
+    }
     return request(
       '/api/diary/ai',
-      { ...body, key, textModel, imageModel },
+      { ...body, key: suppliedKey, textModel, imageModel },
       abortRef.current.signal,
     );
   }
@@ -400,6 +382,7 @@ export default function Home() {
           .filter((e) => draft.references.includes(e.id))
           .map((e) => ({ title: e.title, story: e.story })),
       });
+      if (!result.title || !result.story) throw new Error('故事没有完整返回，请重试');
       if (draft.story)
         setHistory((h) =>
           [{ title: draft.title, story: draft.story }, ...h].slice(0, 6),
@@ -555,7 +538,9 @@ export default function Home() {
           characters: imageDraft.characters,
           size: imageDraft.size,
         });
-        setImageDraft((i) => ({ ...i, step: 2, prompt: result.prompt }));
+        const prompt = result.prompt;
+        if (!prompt) throw new Error('提示词没有完整返回，请重试');
+        setImageDraft((i) => ({ ...i, step: 2, prompt }));
       },
       true,
     );
@@ -581,7 +566,9 @@ export default function Home() {
           image: input,
           confirmed: true,
         });
-        setImageDraft((i) => ({ ...i, step: 3, result: result.image }));
+        const image = result.image;
+        if (!image) throw new Error('图片没有完整返回，请重试');
+        setImageDraft((i) => ({ ...i, step: 3, result: image }));
       },
       true,
     );
@@ -614,7 +601,7 @@ export default function Home() {
     await run(
       'connect',
       async () => {
-        const s = await request('/api/beta/session', {
+        const s = await request('/api/diary/session', {
           action: spaceAction,
           displayName,
           inviteCode,
@@ -1326,8 +1313,8 @@ export default function Home() {
             <>
               <DialogTitle>连接你的 AI</DialogTitle>
               <DialogDescription className="dialog-intro">
-                故事、提示词和图片使用同一个 OpenAI
-                服务。密钥只留在当前页面内存，刷新后需重新填写。
+                故事、提示词和图片使用 OpenAI 服务，请填写 OpenAI API Key。
+                密钥只留在当前页面内存，刷新后需重新填写。
               </DialogDescription>
               <div className="dialog-fields">
                 {configured && (
@@ -1369,8 +1356,8 @@ export default function Home() {
                 </p>
                 {offline && (
                   <div className="status-card">
-                    离线文件可写日记和上传照片。AI
-                    生成与跨设备同步需打开在线版本。
+                    本地版联网后可直接调用模型。只填写自己的片段即可生成，
+                    日记保存在本机；跨设备同步需使用在线版本。
                   </div>
                 )}
               </div>

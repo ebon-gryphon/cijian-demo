@@ -26,6 +26,8 @@ export const members = sqliteTable(
     displayName: text('display_name').notNull(),
     role: text('role', { enum: ['host', 'guest'] }).notNull(),
     tokenHash: text('token_hash').notNull(),
+    // Historical columns retained to avoid destructive future migrations.
+    // The diary application no longer reads or writes these chat settings.
     receptionEnabled: integer('reception_enabled', { mode: 'boolean' })
       .notNull()
       .default(true),
@@ -42,6 +44,7 @@ export const members = sqliteTable(
   ],
 );
 
+// Historical table retained for migration continuity; unused by the diary app.
 export const messages = sqliteTable(
   'messages',
   {

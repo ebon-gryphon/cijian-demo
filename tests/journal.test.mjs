@@ -17,7 +17,7 @@ await build({
   platform: 'node',
   outExtension: { '.js': '.mjs' },
 });
-const { newEntry, validateEntry, migrateLegacy, migrateSharedMemories } =
+const { newEntry, validateEntry } =
   await import(join(dir, 'journal-model.mjs'));
 const { generateJournal } = await import(join(dir, 'journal-ai.mjs'));
 after(() => rm(dir, { recursive: true, force: true }));
@@ -30,32 +30,6 @@ const response = (out) =>
       ],
     }),
   );
-test('legacy diary and only shared relationship memories are preserved', () => {
-  const old = {
-    version: 1,
-    entries: [
-      {
-        id: 'old',
-        date: '2026-09-01',
-        title: '原来的日记',
-        notes: { xia: { text: '我说的话' }, yu: { text: '你说的话' } },
-      },
-    ],
-  };
-  const migrated = migrateLegacy(JSON.stringify(old));
-  assert.equal(migrated[0].story, '我说的话\n\n你说的话');
-  assert.equal(migrated[0].notes.guest, '你说的话');
-  const shared = migrateSharedMemories(
-    JSON.stringify({
-      memories: [
-        { id: '1', title: '共同', text: '已共享', shared: true },
-        { id: '2', title: '私人', text: '不共享', shared: false },
-      ],
-    }),
-  );
-  assert.equal(shared.length, 1);
-  assert.equal(shared[0].story, '已共享');
-});
 test('cloud save rejects unsafe image paths and malformed content', () => {
   const e = { ...newEntry(), title: '标题', story: '故事' };
   assert.equal(validateEntry(e).story, '故事');

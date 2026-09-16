@@ -45,9 +45,6 @@ export default defineConfig(async () => {
   const { cloudflare } = await import('@cloudflare/vite-plugin');
 
   return {
-    // Prepare the account menu before the first page load, avoiding a late
-    // optimizer restart that mixes old and new React modules during hydration.
-    optimizeDeps: { include: ['@base-ui/react/menu'] },
     css: { postcss: { plugins: [tailwindcss()] } },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }

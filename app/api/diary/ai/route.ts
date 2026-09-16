@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { readJson, sameOrigin, requireMember } from '@/app/beta-server';
+import { readJson, sameOrigin, requireMember } from '@/app/journal-server';
 import { AIError, generateJournal } from '@/app/journal-ai';
 const headers = { 'Cache-Control': 'no-store' };
 export async function GET() {

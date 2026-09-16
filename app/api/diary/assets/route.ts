@@ -1,15 +1,15 @@
 import { env } from 'cloudflare:workers';
 import { getD1 } from '@/db';
 import {
-  BetaError,
-  betaErrorResponse,
+  JournalError,
+  journalErrorResponse,
   requireMember,
   sameOrigin,
   readJson,
-} from '@/app/beta-server';
+} from '@/app/journal-server';
 export async function POST(request: Request) {
   try {
-    if (!sameOrigin(request)) throw new BetaError('不支持跨站请求', 403);
+    if (!sameOrigin(request)) throw new JournalError('不支持跨站请求', 403);
     const member = await requireMember(request);
     const b = (await readJson(request, 11500000)) as { data?: string };
     const match =
@@ -18,10 +18,10 @@ export async function POST(request: Request) {
             /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/,
           )
         : null;
-    if (!match) throw new BetaError('图片格式不正确');
+    if (!match) throw new JournalError('图片格式不正确');
     const bytes = Uint8Array.from(atob(match[2]), (c) => c.charCodeAt(0));
     if (bytes.byteLength > 8 * 1024 * 1024)
-      throw new BetaError('图片不能超过 8 MB');
+      throw new JournalError('图片不能超过 8 MB');
     const valid =
       match[1] === 'image/png'
         ? bytes[0] === 137 &&
@@ -32,9 +32,9 @@ export async function POST(request: Request) {
           ? bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
           : String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' &&
             String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP';
-    if (!valid) throw new BetaError('文件内容与图片格式不一致');
+    if (!valid) throw new JournalError('文件内容与图片格式不一致');
     if (!env.JOURNAL_IMAGES)
-      throw new BetaError('图片存储暂时不可用，请保留草稿稍后重试', 503);
+      throw new JournalError('图片存储暂时不可用，请保留草稿稍后重试', 503);
     const id = crypto.randomUUID();
     const key = `${member.spaceId}/${id}`;
     await env.JOURNAL_IMAGES.put(key, bytes, {
@@ -56,6 +56,6 @@ export async function POST(request: Request) {
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (e) {
-    return betaErrorResponse(e);
+    return journalErrorResponse(e);
   }
 }

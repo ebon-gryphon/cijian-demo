@@ -119,46 +119,6 @@ export const examples: Entry[] = [
     sample: true,
   },
 ];
-export function migrateLegacy(raw: string | null): Entry[] {
-  if (!raw) return [];
-  type OldDiary = {
-    id: string;
-    title: string;
-    date?: string;
-    photo?: string;
-    notes?: { xia?: { text?: string }; yu?: { text?: string } };
-  };
-  const v = JSON.parse(raw) as { version?: number; entries?: OldDiary[] };
-  if (v?.version !== 1 || !Array.isArray(v.entries)) return [];
-  return v.entries
-    .filter((e) => typeof e.id === 'string' && typeof e.title === 'string')
-    .map((e) => ({
-      id: `legacy-${e.id}`,
-      date: e.date || today(),
-      title: e.title,
-      story: [e.notes?.xia?.text, e.notes?.yu?.text]
-        .filter(Boolean)
-        .join('\n\n'),
-      notes: { host: e.notes?.xia?.text || '', guest: e.notes?.yu?.text || '' },
-      mode: 'faithful',
-      pictures:
-        typeof e.photo === 'string' &&
-        /^(data:image\/(jpeg|png|webp);base64,|\/memories\/)/.test(e.photo)
-          ? [
-              {
-                id: `legacy-photo-${e.id}`,
-                src: e.photo,
-                kind: 'uploaded',
-                prompt: '',
-              },
-            ]
-          : [],
-      references: [],
-      revision: 0,
-      updatedAt: Date.now(),
-      local: true,
-    }));
-}
 export function storyMessages(input: {
   notes: Record<Person, string>;
   mode: string;
@@ -252,38 +212,4 @@ export function validateEntry(value: unknown): Entry {
     revision: e.revision,
     updatedAt: Date.now(),
   };
-}
-
-export function migrateSharedMemories(raw: string | null): Entry[] {
-  if (!raw) return [];
-  type OldMemory = {
-    id: string;
-    title: string;
-    text: string;
-    shared: boolean;
-    owner?: string;
-    photo?: string;
-  };
-  const data = JSON.parse(raw) as { memories?: OldMemory[] };
-  if (!Array.isArray(data.memories)) return [];
-  return data.memories
-    .filter(
-      (m) => m.shared && typeof m.id === 'string' && typeof m.text === 'string',
-    )
-    .map((m) => ({
-      id: `shared-${m.id}`,
-      date: today(),
-      title: m.title || '以前的共同记忆',
-      story: m.text,
-      notes: {
-        host: m.owner === '林屿' ? '' : m.text,
-        guest: m.owner === '林屿' ? m.text : '',
-      },
-      mode: 'faithful',
-      pictures: [],
-      references: [],
-      revision: 0,
-      updatedAt: Date.now(),
-      local: true,
-    }));
 }

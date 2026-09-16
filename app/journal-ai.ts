@@ -8,6 +8,12 @@ export class AIError extends Error {
   }
 }
 type Input = Record<string, unknown>;
+type JournalResult = {
+  title?: string;
+  story?: string;
+  prompt?: string;
+  image?: string;
+};
 function record(v: unknown): Input {
   return v && typeof v === 'object' ? (v as Input) : {};
 }
@@ -20,7 +26,7 @@ export async function generateJournal(
   models: { text: string; image: string },
   fetcher: typeof fetch = fetch,
   signal?: AbortSignal,
-) {
+): Promise<JournalResult> {
   if (!key) throw new AIError('请先在 AI 设置中连接模型服务', 503);
   const action = limited(body.action, 20);
   if (!['story', 'prompt', 'image', 'edit'].includes(action))

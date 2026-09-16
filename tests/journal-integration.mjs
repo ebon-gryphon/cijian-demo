@@ -13,18 +13,18 @@ async function call(path, body, token) {
   });
   return { status: r.status, body: await r.json() };
 }
-const host = await call('/api/beta/session', {
+const host = await call('/api/diary/session', {
   action: 'create',
   displayName: '验收甲',
 });
 assert.equal(host.status, 201, JSON.stringify(host));
-const guest = await call('/api/beta/session', {
+const guest = await call('/api/diary/session', {
   action: 'join',
   displayName: '验收乙',
   inviteCode: host.body.space.inviteCode,
 });
 assert.equal(guest.status, 201, JSON.stringify(guest));
-const third = await call('/api/beta/session', {
+const third = await call('/api/diary/session', {
   action: 'join',
   displayName: '验收丙',
   inviteCode: host.body.space.inviteCode,
@@ -71,7 +71,7 @@ const tamper = await call(
 assert.equal(tamper.status, 409);
 const unauth = await call('/api/diary/entries');
 assert.equal(unauth.status, 401);
-const other = await call('/api/beta/session', {
+const other = await call('/api/diary/session', {
   action: 'create',
   displayName: '其他空间',
 });
